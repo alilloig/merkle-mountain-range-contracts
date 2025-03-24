@@ -90,7 +90,7 @@ public fun get_peaks_positions(size: u64): vector<u64> {
     } else {
         // If the MMR is multi tree, calculate the height of the largest perfect binary tree 
         // that can fit a MMR of this size
-        let mut largest_tree_height = mmr_bits::get_length(size) - 1;
+        let largest_tree_height = mmr_bits::get_length(size) - 1;
         // Use the height to calculate the largest, and therefor leftmost, tree size
         let mut tree_size = (mmr_bits::get_length((largest_tree_height as u64)) as u64);
         // Iterate over all perfect trees inside the MMR, storing how many nodes are outside the
@@ -138,7 +138,7 @@ public fun get_right_peaks_positions(peak_position: u64, peaks_positions: vector
 }
 
 public fun get_parent_position(position: u64): u64 {
-    let mut parent_position: u64;
+    let parent_position: u64;
     if (is_right_sibling(position)) {
         parent_position = position + 1;
     } else {
