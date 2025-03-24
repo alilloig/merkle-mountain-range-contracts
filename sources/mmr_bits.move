@@ -11,12 +11,12 @@ const Eu64Length: vector<u8> = b"Bit length must be less than or equal to 64";
 /// For example, for 13 (1101 in binary), the function returns 4 since the highest set bit is in position 4.
 /// For 0, it returns 0 as a special case since no bits are needed to represent zero.
 /// This is useful in MMR operations to determine tree heights and positions.
-public fun get_length(num: u64): u64 {
+public fun get_length(num: u64): u8 {
     if (num == 0) {
         return 0
     };
     let mut x = num;
-    let mut count: u64 = 0;
+    let mut count: u8 = 0;
     // Count how many right shifts are needed until the number becomes 0
     while (x > 0) {
         count = count + 1;
