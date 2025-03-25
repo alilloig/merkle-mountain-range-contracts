@@ -1,4 +1,4 @@
-# Merkle Mountain Ranges (MMRs)
+# Merkle Mountain Range
 
 ## Introduction
 
@@ -6,7 +6,7 @@ A Merkle Mountain Range (MMR) is a data structure that extends the concept of a 
 
 ## Sui Move implementation
 
-This is a just for fun implementation of MMRs on Move, based on my own [Cadence implementation for the Flow blockchain](https://github.com/alilloig/flow-merkle-mountain-range). I aim to shoehorn this into a working Sui dapp just as a learning project and with the intention of framing MMR into an hypothetical practical application that could help refining the MMR contract architecture on how the data struct could be use by dapp developers.
+This is a just a for fun implementation of MMRs on Move, based on my own [Cadence implementation for the Flow blockchain](https://github.com/alilloig/flow-merkle-mountain-range). I aim to shoehorn this into a working Sui dapp just as a learning project and with the intention of framing MMR into an hypothetical practical application that could help refining the package architecture on how this data struct could be use by Sui dapp developers.
 
 ### Properties and Applications
 
@@ -67,11 +67,20 @@ The total amount of nodes that form the MMR
 
 ### Root
 
-The unique identifier of a MMR at a certain point of its life, obtained by hashing together all the peaks (also known as bagging peaks).
-(is size included in the calc of the root? some sources say so, im not sure what we are doing)
+The unique identifier of a MMR at a certain point of its life, obtained by hashing together all the peaks (also known as bagging peaks). Some implementations, as this one does, include the MMR size along the peak hashes when computing the root.
+
+### Proof Path
+
+The list of node positions needed for a certain position to be able to calculate the hash of the peak where that leaf belongs
 
 ## Proof Generation and Verification
 
 ### MMR Proofs
 
 An MMR proof for a leaf allows verification that the leaf is part of the MMR without requiring the entire structure.
+
+#### Generation
+
+#### Verification
+
+## Example
