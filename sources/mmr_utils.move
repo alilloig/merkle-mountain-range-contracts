@@ -207,38 +207,11 @@ public fun get_hashes_from_positions(nodes_hashes: vector<vector<u8>>, positions
 public fun hash_with_integer(number: u64, hashes: vector<vector<u8>>): vector<u8> {
     // Concatenate all hashes together
     let mut chain: vector<u8> = vector::empty<u8>();
-    chain.append(u64_to_string(number));
+    chain.append(number.to_string().into_bytes());
     let mut i = 0;
     while (i < hashes.length()) {
         chain.append(hashes[i]);
         i = i + 1;
     };
     hash::blake2b256(&chain)
-}
-
-/// Convert a u64 to its string representation as vector<u8>
-public fun u64_to_string(value: u64): vector<u8> {
-    let mut temp = value;    
-    let mut buffer = vector[];
-    let mut i = vector::length(&buffer);
-    let mut result = vector[];
-
-    if (value == 0) {
-        return vector[48] // ASCII '0'
-    };
-    
-    while (temp > 0) {
-        let remainder = temp % 10;
-        temp = temp / 10;
-        // Add ASCII value of the digit (48 is ASCII for '0')
-        vector::push_back(&mut buffer, (remainder + 48 as u8));
-    };
-    
-    // Reverse the buffer since we've been adding digits in reverse order
-    while (i > 0) {
-        i = i - 1;
-        vector::push_back(&mut result, *vector::borrow(&buffer, i));
-    };
-    
-    result
 }
