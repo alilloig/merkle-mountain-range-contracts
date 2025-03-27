@@ -4,8 +4,8 @@ edition = "2024.beta" # edition = "legacy" to use legacy (pre-2024) Move
 # license = "GPL"
 # authors = ["Álvaro Lillo Igualada (alilloig@gmail.com)"]
 
-[dependencies]
-Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/testnet" }
+#[dependencies]
+#Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/testnet" }
 
 # For remote import, use the `{ git = "...", subdir = "...", rev = "..." }`.
 # Revision can be a branch, a tag, and a commit hash.
