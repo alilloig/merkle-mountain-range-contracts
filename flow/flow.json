@@ -1,0 +1,61 @@
+{
+	"contracts": {
+		"MerkleMountainRange": {
+			"source": "cadence/contracts/MerkleMountainRange.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testing": "0000000000000007"
+			}
+		},
+		"MMRUtils": {
+			"source": "cadence/contracts/MMRUtils.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testing": "0000000000000007"
+			}
+		},
+		"MMRBits": {
+			"source": "cadence/contracts/MMRBits.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testing": "0000000000000007"
+			}
+		}
+	},
+	"dependencies": {
+		"Crypto": {
+			"source": "testnet://8c5303eaa26202d6.Crypto",
+			"hash": "610692c2092bd29d8f49aefc10b6e8ff3d4b3909331fece98f6966fbdcb4cdd4",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testing": "0000000000000007",
+				"testnet": "8c5303eaa26202d6"
+			}
+		}
+	},
+	"networks": {
+		"emulator": "127.0.0.1:3569",
+		"mainnet": "access.mainnet.nodes.onflow.org:9000",
+		"testing": "127.0.0.1:3569",
+		"testnet": "access.devnet.nodes.onflow.org:9000"
+	},
+	"accounts": {
+		"emulator-account": {
+			"address": "f8d6e0586b0a20c7",
+			"key": {
+				"type": "file",
+				"location": "emulator-account.pkey"
+			}
+		}
+	},
+	"deployments": {
+		"emulator": {
+			"emulator-account": [
+				"Crypto",
+				"MerkleMountainRange",
+				"MMRUtils",
+				"MMRBits"
+			]
+		}
+	}
+}
