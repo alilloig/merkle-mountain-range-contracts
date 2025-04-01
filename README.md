@@ -84,3 +84,7 @@ An MMR proof for a leaf allows verification that the leaf is part of the MMR wit
 #### Verification
 
 ## Example
+
+## Acknowledgments
+
+Make sure to check the [CONTRIBUTORS](./CONTRIBUTORS) file for proper credit on this!
