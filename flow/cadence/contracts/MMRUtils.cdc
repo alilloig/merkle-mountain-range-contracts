@@ -4,7 +4,7 @@ import "MMRBits"
 /// Auxiliary contract with double checked functions for fixing proof generation and verification
 /// behavior.
 ///
-access(all) contract MMRUtilAux {
+access(all) contract MMRUtils {
 
     /// ProofPositions struct holds all the positions needed for a proof
     /// This is used to organize the different parts of an MMR inclusion proof
@@ -24,7 +24,7 @@ access(all) contract MMRUtilAux {
         /// @return Array of hashes for the local tree path
         ///
         access(all) fun getLocalTreePathHashes(_ nodesHashes: [[UInt8]]): [[UInt8]] {
-            return MMRUtilAux.getHashesFromPositions(nodesHashes, self.localTreePathPositions)
+            return MMRUtils.getHashesFromPositions(nodesHashes, self.localTreePathPositions)
         }
 
         /// Returns the hashes for peaks to the left of the element's peak
@@ -33,7 +33,7 @@ access(all) contract MMRUtilAux {
         /// @return Array of hashes for left-side peaks
         ///
         access(all) fun getLeftPeaksHashes(_ nodesHashes: [[UInt8]]): [[UInt8]] {
-            return MMRUtilAux.getHashesFromPositions(nodesHashes, self.leftPeaksPositions)
+            return MMRUtils.getHashesFromPositions(nodesHashes, self.leftPeaksPositions)
         }
 
         /// Returns the hashes for peaks to the right of the element's peak
@@ -42,7 +42,7 @@ access(all) contract MMRUtilAux {
         /// @return Array of hashes for right-side peaks
         ///
         access(all) fun getRightPeaksHashes(_ nodesHashes: [[UInt8]]): [[UInt8]] {
-            return MMRUtilAux.getHashesFromPositions(nodesHashes, self.rightPeaksPositions)
+            return MMRUtils.getHashesFromPositions(nodesHashes, self.rightPeaksPositions)
         }
 
         /// Constructor initializes all position arrays
@@ -73,7 +73,7 @@ access(all) contract MMRUtilAux {
         // the proof isn't for a leaf node
         var pathPeakPosition: UInt64 = 0
         if (treePathPositions.length != 0) {
-            pathPeakPosition = MMRUtilAux.getParentPosition(treePathPositions[treePathPositions.length - 1])
+            pathPeakPosition = MMRUtils.getParentPosition(treePathPositions[treePathPositions.length - 1])
         } else {
             // If is a leaf node the tree path will be empty and the peak will be itself
             pathPeakPosition = position

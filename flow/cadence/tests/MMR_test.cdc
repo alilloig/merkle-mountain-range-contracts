@@ -21,14 +21,14 @@ access(self) let assertMmrProperty = fun(attrKey: String, func: fun(AnyStruct)) 
 // Setup function that deploys necessary contracts for testing
 access(all) fun setup() {
     _deploy("MMRBits", "../contracts/MMRBits.cdc", [])
-    _deploy("MMRUtilAux", "../contracts/MMRUtilAux.cdc", [])
+    _deploy("MMRUtils", "../contracts/MMRUtils.cdc", [])
     _deploy("MerkleMountainRange", "../contracts/MerkleMountainRange.cdc", [])
 }
 
 // Runs before each test to set up a fresh MMR
 access(all) fun beforeEach () {
     _executeTransaction("./transactions/mmr/setup.cdc", [mmrStoragePath], account)
-    assertFullMMRState(size: 0, root: MMRUtilAux.hash(UInt8(0).toBigEndianBytes()), peaks: [])
+    assertFullMMRState(size: 0, root: MMRUtils.hash(UInt8(0).toBigEndianBytes()), peaks: [])
 }
 
 // Cleanup after each test
@@ -60,12 +60,12 @@ access(all) fun stringToBytes(_ str: String): [UInt8] {
 
 // Helper function to hash a string
 access(all) fun hashBytesFromString(_ data: String): [UInt8] {
-    return MMRUtilAux.hash(stringToBytes(data))
+    return MMRUtils.hash(stringToBytes(data))
 }
 
 // Helper function to hash a string with its position
 access(all) fun hashToIndexBytesFromString(_ pos: UInt64, _ data: String): [UInt8] {
-    return MMRUtilAux.hashWithInteger(pos, [stringToBytes(data)])
+    return MMRUtils.hashWithInteger(pos, [stringToBytes(data)])
 }
 
 // Creates a leaf string for a given position
