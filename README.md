@@ -1,4 +1,4 @@
-# Merkle Mountain Ranges (MMRs)
+# Merkle Mountain Range
 
 ## Introduction
 
