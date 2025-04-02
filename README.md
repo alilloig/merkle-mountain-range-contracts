@@ -95,4 +95,4 @@ By hashing the data to be verified, we can use the **local tree path hashes** to
 
 ## Acknowledgments
 
-Make sure to check the [CONTRIBUTORS](./CONTRIBUTORS) file for proper credit on this!
+Make sure to check the [CONTRIBUTORS](./CONTRIBUTORS.md) file for proper credit on this!
