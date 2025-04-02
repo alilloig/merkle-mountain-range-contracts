@@ -1,9 +1,10 @@
 [package]
-name = "merkle_mountain_range"
+name = "mmr"
 version = "1.0.0"
-authors = []
+authors = ["Álvaro Lillo Igualada (alilloig@gmail.com)"]
 
 [addresses]
+mmr = "0x0"
 
 [dev-addresses]
 
