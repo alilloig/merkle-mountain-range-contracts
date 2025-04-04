@@ -4,3 +4,7 @@ flow/*.pkey
 
 #sui
 sui/build
+
+#aptos
+aptos/build
+aptos/.aptos
