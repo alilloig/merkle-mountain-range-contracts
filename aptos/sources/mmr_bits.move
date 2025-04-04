@@ -1,9 +1,5 @@
 /// Provides helper functions for doing bitwise operations needed for handling the MMR
 module mmr::mmr_bits {
-
-    /// Trying to create a u64 longer than 64 bits
-    #[error]
-    const Eu64Length: vector<u8> = b"Bit length must be less than or equal to 64";
     
     /// Calculates the minimum number of bits needed to represent a number
     /// 
@@ -64,7 +60,7 @@ module mmr::mmr_bits {
     /// These patterns are useful in MMR operations for creating masks or identifying perfect subtrees.
     /// The function checks that the requested bit length doesn't exceed 64 (the size of u64).
     public fun create_all_ones(bitsLength: u8): u64 {
-        assert!(bitsLength <= 64, Eu64Length);
+        assert!(bitsLength <= 64);
         // Calculate 2^bitsLength - 1, which has 'bitsLength' 1s
         (1 << bitsLength) - 1
     }

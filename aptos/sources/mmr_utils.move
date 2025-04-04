@@ -1,11 +1,9 @@
-module mmr::mmr_utils{
+module mmr::mmr_utils {
 
-    use 0x01::aptos_hash;
+    use std::vector;
+    use aptos_framework::aptos_hash;
+    use aptos_framework::string_utils;
     use mmr::mmr_bits;
-
-    /// Attempting to access node 0
-    #[error]
-    const EStartsAtOne: vector<u8> = b"First position of a MMR node is 1";
 
     public struct ProofPositions has copy, drop {
         // Positions of nodes in the path from the element to its local peak
@@ -16,16 +14,16 @@ module mmr::mmr_utils{
         right_peaks_positions: vector<u64>    
     }
 
-    public fun get_local_tree_path_hashes(proof_positions: &ProofPositions, nodes_hashes: vector<vector<u8>>): vector<vector<u8>> {
-        get_hashes_from_positions(nodes_hashes, proof_positions.local_tree_path_positions)
+    public fun get_local_tree_path_hashes(self: &ProofPositions, nodes_hashes: vector<vector<u8>>): vector<vector<u8>> {
+        get_hashes_from_positions(nodes_hashes, self.local_tree_path_positions)
     }
 
-    public fun get_left_peaks_hashes(proof_positions: &ProofPositions, nodes_hashes: vector<vector<u8>>): vector<vector<u8>> {
-        get_hashes_from_positions(nodes_hashes, proof_positions.left_peaks_positions)
+    public fun get_left_peaks_hashes(self: &ProofPositions, nodes_hashes: vector<vector<u8>>): vector<vector<u8>> {
+        get_hashes_from_positions(nodes_hashes, self.left_peaks_positions)
     }
 
-    public fun get_right_peaks_hashes(proof_positions: &ProofPositions, nodes_hashes: vector<vector<u8>>): vector<vector<u8>> {
-        get_hashes_from_positions(nodes_hashes, proof_positions.right_peaks_positions)
+    public fun get_right_peaks_hashes(self: &ProofPositions, nodes_hashes: vector<vector<u8>>): vector<vector<u8>> {
+        get_hashes_from_positions(nodes_hashes, self.right_peaks_positions)
     }
 
     public fun calc_proof_positions(position: u64, size: u64): ProofPositions {
@@ -115,24 +113,20 @@ module mmr::mmr_utils{
 
     public fun get_left_peaks_positions(peak_position: u64, peaks_positions: vector<u64>): vector<u64> {
         let left_peaks_positions = vector::empty<u64>();
-        let i = 0;
-        while (i < peaks_positions.length()) {
+        for (i in 0..peaks_positions.length()) {
             if (peaks_positions[i] < peak_position){
                 left_peaks_positions.push_back(peaks_positions[i]);
             };
-            i = i + 1;
         };
         left_peaks_positions
     }
 
     public fun get_right_peaks_positions(peak_position: u64, peaks_positions: vector<u64>): vector<u64> {
         let right_peaks_positions = vector::empty<u64>();
-        let i = 0;
-        while (i < peaks_positions.length()) {
+        for (i in 0..peaks_positions.length()) {
             if (peaks_positions[i] > peak_position){
                 right_peaks_positions.push_back(peaks_positions[i]);
             };
-            i = i + 1;
         };
         right_peaks_positions
     }
@@ -159,7 +153,7 @@ module mmr::mmr_utils{
 
     public fun is_right_sibling(position: u64): bool {
         // Ensure position is a valid MMR node
-        assert!(position > 0, EStartsAtOne);
+        assert!(position > 0);
         // If the node is at the same height as the node on position + offset, its a left node
         let height = get_height(position);
         let sibling_offset = sibling_offset(height);    
@@ -196,10 +190,8 @@ module mmr::mmr_utils{
 
     public fun get_hashes_from_positions(nodes_hashes: vector<vector<u8>>, positions: vector<u64>): vector<vector<u8>> {
         let hashes = vector::empty<vector<u8>>();
-        let i = 0;
-        while (i < positions.length()) {
+        for (i in 0..positions.length()) {
             hashes.push_back(nodes_hashes[positions[i] - 1]);
-            i = i + 1;
         };
         hashes
     }
@@ -207,12 +199,10 @@ module mmr::mmr_utils{
     public fun hash_with_integer(number: u64, hashes: vector<vector<u8>>): vector<u8> {
         // Concatenate all hashes together
         let chain: vector<u8> = vector::empty<u8>();
-        chain.append(number.to_string().into_bytes());
-        let i = 0;
-        while (i < hashes.length()) {
-            chain.append(hashes[i]);
-            i = i + 1;
+        chain.append(*string_utils::to_string(&number).bytes());
+        for (i in 0..hashes.length()) {
+            chain.append(hashes[i]);          
         };
-        aptos_hash::blake2b_256(&chain)
+        aptos_hash::blake2b_256(chain)
     }
 }

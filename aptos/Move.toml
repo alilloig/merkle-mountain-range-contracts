@@ -4,13 +4,9 @@ version = "1.0.0"
 authors = ["Álvaro Lillo Igualada (alilloig@gmail.com)"]
 
 [addresses]
-mmr = "0x0"
-
-[dev-addresses]
+mmr = "0x1312"
 
 [dependencies.AptosFramework]
 git = "https://github.com/aptos-labs/aptos-framework.git"
 rev = "mainnet"
 subdir = "aptos-framework"
-
-[dev-dependencies]
