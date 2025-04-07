@@ -8,3 +8,17 @@ sui/build
 #aptos
 aptos/build
 aptos/.aptos
+
+#polygon
+## Compiler files
+polygon/cache/
+polygon/out/
+polygon/lib/
+## Ignores development broadcast logs
+!/polygon/broadcast
+/polygon/broadcast/*/31337/
+/polygon/broadcast/**/dry-run/
+## Docs
+polygon/docs/
+# Dotenv file
+polygon/.env
