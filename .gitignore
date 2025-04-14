@@ -9,16 +9,16 @@ sui/build
 aptos/build
 aptos/.aptos
 
-#polygon
+#evm
 ## Compiler files
-polygon/cache/
-polygon/out/
-polygon/lib/
+evm/cache/
+evm/out/
+evm/lib/
 ## Ignores development broadcast logs
-!/polygon/broadcast
-/polygon/broadcast/*/31337/
-/polygon/broadcast/**/dry-run/
+!/evm/broadcast
+/evm/broadcast/*/31337/
+/evm/broadcast/**/dry-run/
 ## Docs
-polygon/docs/
+evm/docs/
 # Dotenv file
-polygon/.env
+evm/.env
