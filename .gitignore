@@ -8,3 +8,17 @@ sui/build
 #aptos
 aptos/build
 aptos/.aptos
+
+#evm
+## Compiler files
+evm/cache/
+evm/out/
+evm/lib/
+## Ignores development broadcast logs
+!/evm/broadcast
+/evm/broadcast/*/31337/
+/evm/broadcast/**/dry-run/
+## Docs
+evm/docs/
+# Dotenv file
+evm/.env
