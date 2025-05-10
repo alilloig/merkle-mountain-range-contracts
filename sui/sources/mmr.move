@@ -12,7 +12,6 @@ module mmr::mmr;
 use sui::hash;
 use sui::event;
 use mmr::mmr_utils;
-use std::address;
 
 /// Attempting to access node 0.
 #[error]
