@@ -1,25 +1,51 @@
+/// MerkleMountainRange
+/// 
+/// This contract implements a Merkle Mountain Range (MMR) data structure, which is an efficient 
+/// append-only accumulator for cryptographic commitments. MMRs are a collection of perfect binary 
+/// trees arranged as a series of "peaks" that can be efficiently appended to and proven against.
+/// It uses the MMRUtil to derive all the positions needed which it then handles for hash merging and peak bagging.
+/// 
+/// MMRs are particularly useful for lightweight clients, as they allow verifying the inclusion of
+/// elements without needing to store the entire dataset.
 module mmr::mmr;
 
 use sui::hash;
 use sui::event;
 use mmr::mmr_utils;
+use std::address;
 
-/// Attempting to access node 0
+/// Attempting to access node 0.
 #[error]
 const EStartsAtOne: vector<u8> = b"First position of a MMR node is 1";
-/// Attempting to generate a proof for a non-leaf node
+/// Attempting to generate a proof for a non-leaf node.
 #[error]
 const EProofOnlyLeaf: vector<u8> = b"Proofs can only be generated for lead nodes";
-/// Attempting to access a node bigger than MMR size
+/// Attempting to access a node bigger than MMR size.
 #[error]
 const ENonExistingNode: vector<u8> = b"Node does not exists";
 
+/// Event emitted when a public MMR is created.
+public struct MMRShared has copy, drop {
+    creator: address,
+    id: ID
+}
+
+/// Event emitted when the MMR root is updated.
 public struct MMRUpdated has copy, drop {
     root: vector<u8>,
     peaks: vector<vector<u8>>,
     new_size: u64
 }
 
+/// Proof struct that contains all necessary data for verifying the inclusion
+/// of an element in the MMR without needing the entire structure.
+/// 
+/// The proof includes:
+/// - The position of the element in the MMR.
+/// - Hashes from the local tree path (for verification up to the peak).
+/// - Hashes from peaks to the left and right of the element's peak.
+/// - The root hash for verification.
+/// - The size of the MMR when the proof was generated.
 public struct Proof has copy, drop, store {
     position: u64,
     local_tree_path_hashes: vector<vector<u8>>,
@@ -29,18 +55,22 @@ public struct Proof has copy, drop, store {
     mmr_size: u64
 }
 
+/// Return the position of the element in the MMR that this proof is for.
 public fun get_position(proof: &Proof): u64 {
     proof.position
 }
 
+/// Return the root hash of the MMR at the time this proof was generated.
 public fun get_mmr_root(proof: &Proof): vector<u8> {
     proof.mmr_root
 }
 
+/// Return the size of the MMR at the time this proof was generated.
 public fun get_mmr_size(proof: &Proof): u64 {
     proof.mmr_size
 }
 
+/// Verify that some data exists in the MMR the proof belongs to.
 public fun verify(proof: &Proof, data: vector<u8>): bool {
     // For verifying the data we need to calculate the hash for the proof position tree's peak
     // and combine it with the rest of peak hashes and MMR size to calculate the root hash
@@ -80,6 +110,12 @@ public fun verify(proof: &Proof, data: vector<u8>): bool {
     calculated_root_hash == proof.mmr_root
 }
 
+/// MMR object that manages the appending of elements and generation of proofs.
+/// 
+/// This object maintains:
+/// - The current root commitment.
+/// - The current peaks of the MMR.
+/// - All nodes in the MMR.
 public struct MMR has key, store {
     id: UID,
     root: vector<u8>,
@@ -87,6 +123,7 @@ public struct MMR has key, store {
     nodes_hashes: vector<vector<u8>>
 }
 
+/// Initialize a new MMR object.
 fun new(ctx: &mut TxContext): MMR {
     MMR {
         id: object::new(ctx),
@@ -96,26 +133,45 @@ fun new(ctx: &mut TxContext): MMR {
     }
 }
 
+/// Create a new private MMR object and transfer it to the caller address.
 public entry fun create_mmr(ctx: &mut TxContext) {
     transfer::transfer(new(ctx), ctx.sender());
 }
 
+/// Create a new shared MMR that anyone that knows its ID can append elements to it and generate proofs from it.
+/// EXPERIMENTAL: Literally anyone on chain could write to this MMR, so what would be the point?
+/// TO-DO: Explore a capability based version of the MMR that allows to share it while restricting who could write to it.
+public entry fun create_public_mmr(ctx: &mut TxContext) {
+    let mmr = new(ctx);
+    let id = object::id(&mmr);
+    transfer::share_object(mmr);
+    event::emit(MMRShared {
+        creator: ctx.sender(),
+        id: id
+    });
+}
+
+/// Get the current root commitment of the MMR.
 public fun get_root(mmr: &MMR): vector<u8> {
     mmr.root
 }
 
+/// Get the current peaks of the MMR.
 public fun get_peaks(mmr: &MMR): vector<vector<u8>> {
     mmr.peaks_hashes
 }
 
+/// Get all nodes in the MMR.
 public(package) fun get_nodes(mmr: &MMR): vector<vector<u8>> {
     mmr.nodes_hashes
 }
 
+/// Get the amount of nodes in the MMR.
 public fun get_size(mmr: &MMR): u64 {
     mmr.nodes_hashes.length()
 }
 
+/// Append multiple leaf elements to the MMR.
 public fun append_leaves(mmr: &mut MMR, leaves_data: vector<vector<u8>>) {
     if (leaves_data.length() == 0) {
         return
@@ -132,6 +188,8 @@ public fun append_leaves(mmr: &mut MMR, leaves_data: vector<vector<u8>>) {
     })
 }
 
+/// Append a single leaf element to the MMR.
+/// This is the core append logic that handles the creation of new nodes and merging of peaks as needed.
 fun append_leaf(mmr: &mut MMR, leaf_data: vector<u8>) {
     // Calculate which new nodes and peaks will be created by appending a new leaf
     let mut child_hashes: vector<vector<u8>>;
@@ -163,6 +221,7 @@ fun append_leaf(mmr: &mut MMR, leaf_data: vector<u8>) {
     mmr.root = mmr_utils::hash_with_integer(mmr.get_size(), mmr.peaks_hashes);
 }
 
+/// Generate a proof for the element at the specified position.
 public fun generate_proof(mmr: &MMR, position: u64): Proof {
     // Check that the position that wants to get proved is correct
     assert!(position > 0, EStartsAtOne);
