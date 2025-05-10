@@ -1,3 +1,5 @@
+/// Defines core MMR computation logic, exposing functions for position indexing, peak resolution, 
+/// and proof construction used in Merkle Mountain Range operations.
 module mmr::mmr_utils;
 
 use sui::hash;
@@ -7,6 +9,8 @@ use mmr::mmr_bits;
 #[error]
 const EStartsAtOne: vector<u8> = b"First position of a MMR node is 1";
 
+/// Hold all the positions needed for a proof. Used to organize the different parts of an MMR 
+/// inclusion proof.
 public struct ProofPositions has copy, drop {
     // Positions of nodes in the path from the element to its local peak
     local_tree_path_positions: vector<u64>,
@@ -16,18 +20,23 @@ public struct ProofPositions has copy, drop {
     right_peaks_positions: vector<u64>    
 }
 
+/// Return the hashes for the nodes in the local tree path.
 public fun get_local_tree_path_hashes(proof_positions: &ProofPositions, nodes_hashes: vector<vector<u8>>): vector<vector<u8>> {
     get_hashes_from_positions(nodes_hashes, proof_positions.local_tree_path_positions)
 }
 
+/// Return the hashes for peaks to the left of the element's peak.
 public fun get_left_peaks_hashes(proof_positions: &ProofPositions, nodes_hashes: vector<vector<u8>>): vector<vector<u8>> {
     get_hashes_from_positions(nodes_hashes, proof_positions.left_peaks_positions)
 }
 
+/// Return the hashes for peaks to the right of the element's peak.
 public fun get_right_peaks_hashes(proof_positions: &ProofPositions, nodes_hashes: vector<vector<u8>>): vector<vector<u8>> {
     get_hashes_from_positions(nodes_hashes, proof_positions.right_peaks_positions)
 }
 
+/// Calculate all positions needed for an inclusion proof, including the local path, and peaks to
+/// the left and right.
 public fun calc_proof_positions(position: u64, size: u64): ProofPositions {
     // Get the local tree path positions
     let tree_path_positions = calc_proof_tree_path_positions(position, size);
@@ -58,6 +67,7 @@ public fun calc_proof_positions(position: u64, size: u64): ProofPositions {
     }
 }
 
+/// Calculate the proof path (node positions) to his local tree peak in a MMR.
 public fun calc_proof_tree_path_positions(proof_position: u64, size: u64): vector<u64> {
     let mut path_positions = vector::empty<u64>();
     let mut current_node_position: u64;
@@ -80,6 +90,7 @@ public fun calc_proof_tree_path_positions(proof_position: u64, size: u64): vecto
     path_positions
 }
 
+/// Calculate all peak positions in an MMR of a given size.
 public fun get_peaks_positions(size: u64): vector<u64> {
     let mut peaks_positions: vector<u64> = vector::empty<u64>();
     // Empty MMR has no peaks
@@ -113,6 +124,7 @@ public fun get_peaks_positions(size: u64): vector<u64> {
     peaks_positions    
 }
 
+/// Collect positions of peaks to the left of a given peak.
 public fun get_left_peaks_positions(peak_position: u64, peaks_positions: vector<u64>): vector<u64> {
     let mut left_peaks_positions = vector::empty<u64>();
     let mut i = 0;
@@ -125,6 +137,7 @@ public fun get_left_peaks_positions(peak_position: u64, peaks_positions: vector<
     left_peaks_positions
 }
 
+/// Collect positions of peaks to the right of a given peak.
 public fun get_right_peaks_positions(peak_position: u64, peaks_positions: vector<u64>): vector<u64> {
     let mut right_peaks_positions = vector::empty<u64>();
     let mut i = 0;
@@ -137,6 +150,12 @@ public fun get_right_peaks_positions(peak_position: u64, peaks_positions: vector
     right_peaks_positions
 }
 
+/// Calculate the position of a node's parent in the MMR.
+/// In a Merkle Mountain Range, each node (except for the peaks) has a parent.
+/// This function determines the position of the parent node by:
+/// 1. Checking if the node is a right or left sibling using isRightSibling().
+/// 2. For right siblings, the parent is at position + 1.
+/// 3. For left siblings, the parent is at the right sibling's position + 1.
 public fun get_parent_position(position: u64): u64 {
     let parent_position: u64;
     if (is_right_sibling(position)) {
@@ -147,6 +166,12 @@ public fun get_parent_position(position: u64): u64 {
     parent_position
 }
 
+/// Calculate the position of a node's sibling in the MMR.
+/// In a Merkle Mountain Range, each node (except peaks) has a sibling. This function
+/// determines the position of the sibling for a given node by:
+/// 1. Checking if the node is a right or left sibling using isRightSibling().
+/// 2. Calculating the appropriate offset based on the node's height.
+/// 3. Adding or subtracting the offset depending on whether the node is a left or right sibling.
 public fun get_sibling_position(position: u64): u64 {
     let sibling_position: u64;
     if (is_right_sibling(position)) {
@@ -157,6 +182,10 @@ public fun get_sibling_position(position: u64): u64 {
     sibling_position
 }
 
+/// Determine if a node is a right sibling in the MMR.
+/// This function checks if a node at the given position is a right sibling by getting the 
+/// sibling offset at the node height and comparing that height with the height of the node on
+/// position plus offset.
 public fun is_right_sibling(position: u64): bool {
     // Ensure position is a valid MMR node
     assert!(position > 0, EStartsAtOne);
@@ -170,10 +199,12 @@ public fun is_right_sibling(position: u64): bool {
     }
 }
 
+/// Calculate the offset to find a sibling node at a given height.
 public fun sibling_offset(height: u8): u64 {
     mmr_bits::create_all_ones(height)
 }
 
+/// Get the height of a node given its position.
 public fun get_height(position: u64): u8 {
     // We are looking for the leftmost node at the node level, we start our search from the position itself
     let mut left_most_node = position;
@@ -187,6 +218,19 @@ public fun get_height(position: u64): u8 {
     mmr_bits::get_length(left_most_node)
 }
 
+/// Navigate leftward in the MMR tree structure by removing the rightmost 1 bit and trailing zeros
+/// This function is used to traverse the MMR structure horizontally at the same height level.
+/// When called on a node position, it returns the position of another node to the left
+/// that is at the same height in the tree structure.
+/// 
+/// The implementation works by:
+/// 1. Finding the most significant bit (MSB) of the position.
+/// 2. Removing all bits to the right of the MSB (by subtracting them).
+/// When called recursively, this function can be used to navigate to the leftmost node
+/// at the same height level, which is useful for determining node properties in the MMR.
+/// For example:
+/// - For position 6 (binary 110), the MSB is at position 2 (value 4), and jumpLeft returns 4
+/// - For position 11 (binary 1011), the MSB is at position 3 (value 8), and jumpLeft returns 8
 public fun jump_left (position: u64): u64 {
     // Find the most significant bit position
     let most_significant_bit: u64 = 1 << (mmr_bits::get_length(position) - 1);
@@ -194,6 +238,7 @@ public fun jump_left (position: u64): u64 {
     position - (most_significant_bit - 1)
 }
 
+/// Extract a subset of hashes at certain positions.
 public fun get_hashes_from_positions(nodes_hashes: vector<vector<u8>>, positions: vector<u64>): vector<vector<u8>> {
     let mut hashes = vector::empty<vector<u8>>();
     let mut i = 0;
@@ -204,6 +249,10 @@ public fun get_hashes_from_positions(nodes_hashes: vector<vector<u8>>, positions
     hashes
 }
 
+/// Combine multiple hashes with an integer and hash the result.
+/// This is used for creating a new leaf node by hashing its data with its position, a parent 
+/// node by hashing its child nodes along its position and for calculating the root bagging all 
+/// the peaks on the MMR together with the MMR size.
 public fun hash_with_integer(number: u64, hashes: vector<vector<u8>>): vector<u8> {
     // Concatenate all hashes together
     let mut chain: vector<u8> = vector::empty<u8>();
