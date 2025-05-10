@@ -1,4 +1,4 @@
-/// Defines core MMR computation logic, exposing functions for position indexing, peak resolution, 
+/// Define core MMR computation logic, exposing functions for position indexing, peak resolution, 
 /// and proof construction used in Merkle Mountain Range operations.
 module mmr::mmr_utils;
 
