@@ -4,6 +4,7 @@ flow/*.pkey
 
 #sui
 sui/build
+sui/transactions
 
 #aptos
 aptos/build
