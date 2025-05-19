@@ -97,6 +97,6 @@ By hashing the data to be verified, we can use the **local tree path hashes** to
 
 Make sure to check the [CONTRIBUTORS](./../CONTRIBUTORS.md) file for proper credit on this!
 
-### Sui Testnet Package Address
-
-[0xfecf927a5913070eebd05821b5a6d38dacc225a40e6b0865be83a3c03e4afa6f](https://suiscan.xyz/testnet/object/0xfecf927a5913070eebd05821b5a6d38dacc225a40e6b0865be83a3c03e4afa6f/contracts)
+### Sui Testnet
+[Package](https://testnet.suivision.xyz/package/0xfecf927a5913070eebd05821b5a6d38dacc225a40e6b0865be83a3c03e4afa6f?tab=Code)
+[Package Metadata](https://testnet.suivision.xyz/object/0x0792a84d27a008b070c6e739fa79fd6cf49a36fbb73c982d3204f337c3e438fc)
