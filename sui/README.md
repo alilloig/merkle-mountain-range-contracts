@@ -99,4 +99,4 @@ Make sure to check the [CONTRIBUTORS](./../CONTRIBUTORS.md) file for proper cred
 
 ### Sui Testnet Package Address
 
-0xfecf927a5913070eebd05821b5a6d38dacc225a40e6b0865be83a3c03e4afa6f
+[0xfecf927a5913070eebd05821b5a6d38dacc225a40e6b0865be83a3c03e4afa6f](https://suiscan.xyz/testnet/object/0xfecf927a5913070eebd05821b5a6d38dacc225a40e6b0865be83a3c03e4afa6f/contracts)
