@@ -37,17 +37,18 @@ fun create_all_ones_known_values() {
     assert_eq!(mmr_bits::create_all_ones(63), (1u64 << 63) - 1);
 }
 
-#[test, expected_failure(abort_code = mmr_bits::Eu64Length)]
+#[test, expected_failure(abort_code = mmr_bits::EU64Length)]
 fun create_all_ones_64_aborts() {
     mmr_bits::create_all_ones(64);
 }
 
-#[test, expected_failure(abort_code = mmr_bits::Eu64Length)]
+#[test, expected_failure(abort_code = mmr_bits::EU64Length)]
 fun create_all_ones_255_aborts() {
     mmr_bits::create_all_ones(255);
 }
 
-/// Pins the documented precondition of `are_all_ones`: `num + 1` overflows at u64::MAX.
+/// Pins the documented precondition of `mmr_utils::get_height` (`position < u64::MAX`):
+/// `are_all_ones` computes `num + 1`, which overflows at u64::MAX.
 #[test, expected_failure(arithmetic_error, location = mmr::mmr_bits)]
 fun are_all_ones_u64_max_overflows() {
     mmr_bits::are_all_ones(std::u64::max_value!());

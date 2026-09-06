@@ -18,6 +18,9 @@ const EStartsAtOne: vector<u8> = b"First position of a MMR node is 1";
 /// The position is an internal node, not a leaf.
 #[error]
 const ENotALeaf: vector<u8> = b"Position is not a leaf node";
+/// Position 0 or beyond the MMR size (or beyond the node set in `get_hashes_from_positions`).
+#[error]
+const EPositionOutOfRange: vector<u8> = b"Position must be between 1 and the MMR size";
 
 /// The node positions an inclusion proof for one leaf needs, split by role.
 public struct ProofPositions has copy, drop {
@@ -46,7 +49,11 @@ public fun right_peaks_positions(proof_positions: &ProofPositions): vector<u64> 
 
 /// Calculate all positions needed for an inclusion proof of the leaf at `position` in an MMR of
 /// `size` nodes: the local path, and the peaks to the left and to the right of its local peak.
+/// Aborts with `EPositionOutOfRange` unless `1 <= position <= size` and with `ENotALeaf` when
+/// `position` is an internal node.
 public fun calc_proof_positions(position: u64, size: u64): ProofPositions {
+    assert!(position >= 1 && position <= size, EPositionOutOfRange);
+    assert!(get_height(position) == 1, ENotALeaf);
     // Get the local tree path positions
     let tree_path_positions = calc_proof_tree_path_positions(position, size);
     // The local peak is the parent of the last path position, or the leaf itself when the leaf
@@ -77,9 +84,10 @@ public fun calc_proof_positions(position: u64, size: u64): ProofPositions {
 
 /// Calculate the sibling positions on the path from `proof_position` up to its local peak in an
 /// MMR of `size` nodes. The last node of an MMR is always a peak, so its path is empty.
-/// Precondition: `1 <= proof_position <= size` (callers validate; the loop pops an empty vector
-/// otherwise).
+/// Aborts with `EPositionOutOfRange` unless `1 <= proof_position <= size` (the loop would pop an
+/// empty vector otherwise).
 public fun calc_proof_tree_path_positions(proof_position: u64, size: u64): vector<u64> {
+    assert!(proof_position >= 1 && proof_position <= size, EPositionOutOfRange);
     let mut path_positions = vector::empty<u64>();
     let mut current_node_position: u64;
     let mut sibling_position: u64;
@@ -266,8 +274,8 @@ public fun get_height(position: u64): u8 {
     mmr_bits::get_length(left_most_node)
 }
 
-/// Move to a node of the same height further left by clearing every bit below the most
-/// significant bit and adding one: `position - (2^(len-1) - 1)`. Examples: 6 -> 3; 11 -> 4.
+/// Move to a node of the same height further left by dropping the most significant bit and
+/// adding one: `position - (2^(len-1) - 1)`. Examples: 6 -> 3; 11 -> 4.
 public fun jump_left (position: u64): u64 {
     // Find the most significant bit position
     let most_significant_bit: u64 = 1 << (mmr_bits::get_length(position) - 1);
@@ -276,10 +284,14 @@ public fun jump_left (position: u64): u64 {
 }
 
 /// Read the hashes stored at `positions` (1-based) out of a full node set (`nodes_hashes[p - 1]`).
+/// Aborts with `EStartsAtOne` for position 0 and with `EPositionOutOfRange` for a position beyond
+/// `nodes_hashes.length()`.
 public fun get_hashes_from_positions(nodes_hashes: &vector<vector<u8>>, positions: &vector<u64>): vector<vector<u8>> {
     let mut hashes = vector::empty<vector<u8>>();
     let mut i = 0;
     while (i < positions.length()) {
+        assert!(positions[i] >= 1, EStartsAtOne);
+        assert!(positions[i] <= nodes_hashes.length(), EPositionOutOfRange);
         hashes.push_back(nodes_hashes[positions[i] - 1]);
         i = i + 1;
     };

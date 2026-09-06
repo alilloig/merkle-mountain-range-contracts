@@ -3,7 +3,7 @@ module mmr::mmr_bits;
 
 /// Requested 64 or more one-bits; `1 << 64` does not fit a `u64`.
 #[error]
-const Eu64Length: vector<u8> = b"Bit length must be less than 64";
+const EU64Length: vector<u8> = b"Bit length must be less than 64";
 
 /// Return the minimum number of bits needed to represent `num` (0 for 0). Example: 13 -> 4.
 public fun get_length(num: u64): u8 {
@@ -39,9 +39,9 @@ public fun are_all_ones(num: u64): bool {
 }
 
 /// Return the number with exactly `bits_length` least significant one-bits (2^bits_length - 1).
-/// `bits_length` must be at most 63; aborts with `Eu64Length` otherwise.
+/// `bits_length` must be at most 63; aborts with `EU64Length` otherwise.
 public fun create_all_ones(bits_length: u8): u64 {
-    assert!(bits_length < 64, Eu64Length);
+    assert!(bits_length < 64, EU64Length);
     // Calculate 2^bits_length - 1, which has 'bits_length' 1s
     (1 << bits_length) - 1
 }

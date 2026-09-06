@@ -4,7 +4,7 @@ Multi-chain MMR implementations. The actively developed package is the Sui Move 
 
 ## Stack
 
-- Sui Move, edition `2024`, package name `mmr`. Modules: `mmr` (shared object, caps, checkpoints, events, object-bound verifiers), `mmr_proof` (pure verifiers over a caller-supplied root/size), `mmr_utils` and `mmr_bits` (position math; hashing conventions are frozen, shared with the Aptos port).
+- Sui Move, edition `2024`, package name `mmr`. Modules: `mmr` (shared object, caps, anchors, events, object-bound verifiers), `mmr_proof` (pure verifiers over a caller-supplied root/size), `mmr_utils` and `mmr_bits` (position math; hashing conventions are frozen, shared with the Aptos port).
 - Tests live in `sui/tests/`; the off-chain-style prover is the `#[test_only]` module `sui/tests/mmr_prover.move`.
 - `sui/scripts/mmr_ref.py` is the Python reference prover; `sui/scripts/golden.py --check tests/mmr_proof_tests.move` fails when a pinned golden constant drifts.
 

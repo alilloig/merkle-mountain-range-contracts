@@ -3,6 +3,3 @@ name = "mmr"
 edition = "2024"
 license = "GPL-3.0-only"
 authors = ["Álvaro Lillo Igualada (alilloig@gmail.com)"]
-
-[addresses]
-mmr = "0x0"

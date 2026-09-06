@@ -5,7 +5,7 @@
 module mmr::mmr_adversarial_tests;
 
 use std::unit_test::assert_eq;
-use mmr::mmr::{Self, MMR, AdminCap, AppendCap};
+use mmr::mmr;
 use mmr::mmr_test_fixtures::{setup, teardown};
 use mmr::mmr_proof;
 use mmr::mmr_prover::{Self, NodeSet};
@@ -650,8 +650,9 @@ fun b15_whole_mountain_plus_its_peak() {
 
 // ============================================================================== object wrappers
 
-/// O01: honest `verify` true; the same proof at another position or with another MMR's data
-/// false; wrapper aborts are the `mmr_proof` errors.
+/// O01: through the object, the honest single and batch proofs are true; the same proof at
+/// another position, with other data, the prefix-impersonation and root-as-leaf shapes, and
+/// batch siblings in position order are all false.
 #[test]
 fun o01_object_verify_replays() {
     let ctx = &mut tx_context::dummy();
@@ -678,119 +679,119 @@ fun o01_object_verify_replays() {
     teardown(mmr, admin, cap);
 }
 
-/// O02: three batches -> checkpoints 4, 15, 23. A proof from size 23 used at an earlier
-/// checkpoint aborts on shape or returns false; it never verifies a leaf that was not there.
+/// O02: three batches -> anchors 4, 15, 23. A proof from size 23 used at an earlier
+/// anchor aborts on shape or returns false; it never verifies a leaf that was not there.
 #[test]
-fun o02_checkpoint_shapes() {
+fun o02_anchor_shapes() {
     let ctx = &mut tx_context::dummy();
     let (mut mmr, admin, cap) = setup(ctx);
     mmr.append_leaves(&cap, leaves_range(1, 3), ctx);
     mmr.append_leaves(&cap, leaves_range(4, 8), ctx);
     mmr.append_leaves(&cap, leaves_range(9, 13), ctx);
-    assert!(mmr.has_checkpoint(4));
-    assert!(mmr.has_checkpoint(15));
-    assert!(mmr.has_checkpoint(23));
+    assert!(mmr.has_anchor(4));
+    assert!(mmr.has_anchor(15));
+    assert!(mmr.has_anchor(23));
     let ns = mmr_prover::build(13);
     // position 1 proof at size 15: path [n2, n6, n14], no peaks. Legitimately true (leaf 1 is in
     // the size-15 MMR and this IS the size-15 proof).
-    assert!(mmr.verify_at_checkpoint(15, 1, b"1", vector[n(&ns, 2), n(&ns, 6), n(&ns, 14)], vector[], vector[]));
-    assert!(!mmr.verify_at_checkpoint(15, 1, b"2", vector[n(&ns, 2), n(&ns, 6), n(&ns, 14)], vector[], vector[]));
-    // batch {1} at checkpoint 4: honest size-4 proof true; wrong untouched false
-    assert!(mmr.verify_multiple_at_checkpoint(4, vector[1], vector[b"1"], vector[n(&ns, 2)], vector[n(&ns, 4)]));
-    assert!(!mmr.verify_multiple_at_checkpoint(4, vector[1], vector[b"1"], vector[n(&ns, 2)], vector[n(&ns, 5)]));
-    // a size-23 proof for leaf 9 (position 16) can never verify at checkpoint 4 or 15 (aborts,
-    // tested below); a size-23 proof for position 1 at checkpoint 23 is true
+    assert!(mmr.verify_at_anchor(15, 1, b"1", vector[n(&ns, 2), n(&ns, 6), n(&ns, 14)], vector[], vector[]));
+    assert!(!mmr.verify_at_anchor(15, 1, b"2", vector[n(&ns, 2), n(&ns, 6), n(&ns, 14)], vector[], vector[]));
+    // batch {1} at anchor 4: honest size-4 proof true; wrong untouched false
+    assert!(mmr.verify_multiple_at_anchor(4, vector[1], vector[b"1"], vector[n(&ns, 2)], vector[n(&ns, 4)]));
+    assert!(!mmr.verify_multiple_at_anchor(4, vector[1], vector[b"1"], vector[n(&ns, 2)], vector[n(&ns, 5)]));
+    // a size-23 proof for leaf 9 (position 16) can never verify at anchor 4 or 15 (aborts,
+    // tested below); a size-23 proof for position 1 at anchor 23 is true
     let (path, left, right) = ns.single_proof(1);
-    assert!(mmr.verify_at_checkpoint(23, 1, b"1", path, left, right));
+    assert!(mmr.verify_at_anchor(23, 1, b"1", path, left, right));
     assert!(mmr.verify(1, b"1", path, left, right));
     teardown(mmr, admin, cap);
 }
 
 #[test, expected_failure(abort_code = mmr_proof::EPositionOutOfRange)]
-fun o02b_later_position_at_earlier_checkpoint() {
+fun o02b_later_position_at_earlier_anchor() {
     let ctx = &mut tx_context::dummy();
-    let (mut mmr, admin, cap) = setup(ctx);
+    let (mut mmr, _admin, cap) = setup(ctx);
     mmr.append_leaves(&cap, leaves_range(1, 3), ctx);
     mmr.append_leaves(&cap, leaves_range(4, 8), ctx);
     mmr.append_leaves(&cap, leaves_range(9, 13), ctx);
     let ns = mmr_prover::build(13);
     let (path, left, right) = ns.single_proof(16);
-    mmr.verify_at_checkpoint(15, 16, b"9", path, left, right);
-    teardown(mmr, admin, cap);
+    mmr.verify_at_anchor(15, 16, b"9", path, left, right);
+    abort
 }
 
 #[test, expected_failure(abort_code = mmr_proof::EPathLength)]
-fun o02c_size_23_proof_at_checkpoint_4() {
+fun o02c_size_23_proof_at_anchor_4() {
     let ctx = &mut tx_context::dummy();
-    let (mut mmr, admin, cap) = setup(ctx);
+    let (mut mmr, _admin, cap) = setup(ctx);
     mmr.append_leaves(&cap, leaves_range(1, 3), ctx);
     mmr.append_leaves(&cap, leaves_range(4, 8), ctx);
     mmr.append_leaves(&cap, leaves_range(9, 13), ctx);
     let ns = mmr_prover::build(13);
     let (path, left, right) = ns.single_proof(1);
-    mmr.verify_at_checkpoint(4, 1, b"1", path, left, right);
-    teardown(mmr, admin, cap);
+    mmr.verify_at_anchor(4, 1, b"1", path, left, right);
+    abort
 }
 
 #[test, expected_failure(abort_code = mmr_proof::EPeaksCount)]
-fun o02d_size_23_proof_at_checkpoint_15() {
+fun o02d_size_23_proof_at_anchor_15() {
     let ctx = &mut tx_context::dummy();
-    let (mut mmr, admin, cap) = setup(ctx);
+    let (mut mmr, _admin, cap) = setup(ctx);
     mmr.append_leaves(&cap, leaves_range(1, 3), ctx);
     mmr.append_leaves(&cap, leaves_range(4, 8), ctx);
     mmr.append_leaves(&cap, leaves_range(9, 13), ctx);
     let ns = mmr_prover::build(13);
     let (path, left, right) = ns.single_proof(1);
-    mmr.verify_at_checkpoint(15, 1, b"1", path, left, right);
-    teardown(mmr, admin, cap);
+    mmr.verify_at_anchor(15, 1, b"1", path, left, right);
+    abort
 }
 
 #[test, expected_failure(abort_code = mmr_proof::ELeftoverProofHashes)]
-fun o02e_size_23_batch_at_checkpoint_4() {
+fun o02e_size_23_batch_at_anchor_4() {
     let ctx = &mut tx_context::dummy();
-    let (mut mmr, admin, cap) = setup(ctx);
+    let (mut mmr, _admin, cap) = setup(ctx);
     mmr.append_leaves(&cap, leaves_range(1, 3), ctx);
     mmr.append_leaves(&cap, leaves_range(4, 8), ctx);
     mmr.append_leaves(&cap, leaves_range(9, 13), ctx);
     let ns = mmr_prover::build(13);
     let (s, u) = ns.batch_proof(vector[1]);
-    mmr.verify_multiple_at_checkpoint(4, vector[1], vector[b"1"], s, u);
-    teardown(mmr, admin, cap);
+    mmr.verify_multiple_at_anchor(4, vector[1], vector[b"1"], s, u);
+    abort
 }
 
-/// O03: a valid MMR size with no checkpoint row -> ENoCheckpoint, before any proof math (the
+/// O03: a valid MMR size with no anchor row -> ENoAnchor, before any proof math (the
 /// proof is deliberately malformed and would abort with EPathLength otherwise).
-#[test, expected_failure(abort_code = mmr::ENoCheckpoint)]
-fun o03_checkpoint_missing_size() {
+#[test, expected_failure(abort_code = mmr::ENoAnchor)]
+fun o03_anchor_missing_size() {
     let ctx = &mut tx_context::dummy();
-    let (mut mmr, admin, cap) = setup(ctx);
+    let (mut mmr, _admin, cap) = setup(ctx);
     mmr.append_leaves(&cap, leaves_range(1, 3), ctx);
     mmr.append_leaves(&cap, leaves_range(4, 8), ctx);
-    mmr.verify_at_checkpoint(7, 1, b"1", vector[], vector[], vector[]);
-    teardown(mmr, admin, cap);
+    mmr.verify_at_anchor(7, 1, b"1", vector[], vector[], vector[]);
+    abort
 }
 
-#[test, expected_failure(abort_code = mmr::ENoCheckpoint)]
-fun o03b_checkpoint_size_zero() {
+#[test, expected_failure(abort_code = mmr::ENoAnchor)]
+fun o03b_anchor_size_zero() {
     let ctx = &mut tx_context::dummy();
-    let (mut mmr, admin, cap) = setup(ctx);
+    let (mut mmr, _admin, cap) = setup(ctx);
     mmr.append_leaves(&cap, leaves_range(1, 3), ctx);
-    mmr.verify_multiple_at_checkpoint(0, vector[1], vector[b"1"], vector[], vector[]);
-    teardown(mmr, admin, cap);
+    mmr.verify_multiple_at_anchor(0, vector[1], vector[b"1"], vector[], vector[]);
+    abort
 }
 
-#[test, expected_failure(abort_code = mmr::ENoCheckpoint)]
-fun o03c_checkpoint_beyond_size() {
+#[test, expected_failure(abort_code = mmr::ENoAnchor)]
+fun o03c_anchor_beyond_size() {
     let ctx = &mut tx_context::dummy();
-    let (mut mmr, admin, cap) = setup(ctx);
+    let (mut mmr, _admin, cap) = setup(ctx);
     mmr.append_leaves(&cap, leaves_range(1, 3), ctx);
-    mmr.verify_at_checkpoint(23, 16, b"9", vector[], vector[], vector[]);
-    teardown(mmr, admin, cap);
+    mmr.verify_at_anchor(23, 16, b"9", vector[], vector[], vector[]);
+    abort
 }
 
 /// O04: cross-anchor. Two MMRs share leaves 1..3 and differ in leaf 4 (both size 7, one
-/// checkpoint at 4 and one at 7). A proof of leaf 4 from A is false against B; a proof of leaf 1
-/// at the shared checkpoint 4 is true against both (the leaf IS in both).
+/// anchor at 4 and one at 7). A proof of leaf 4 from A is false against B; a proof of leaf 1
+/// at the shared anchor 4 is true against both (the leaf IS in both).
 #[test]
 fun o04_cross_anchor() {
     let ctx = &mut tx_context::dummy();
@@ -827,12 +828,12 @@ fun o04_cross_anchor() {
     assert!(!b.verify_multiple(vector[5], vector[b"4"], s, u));
     let (s, u) = ns_a.batch_proof(vector[1, 5]);
     assert!(!b.verify_multiple(vector[1, 5], vector[b"1", b"4"], s, u));
-    // leaf 1 at the shared checkpoint 4 (honest size-4 proof) verifies against both
+    // leaf 1 at the shared anchor 4 (honest size-4 proof) verifies against both
     let ns3 = mmr_prover::build(3);
     let (p4, l4, r4) = ns3.single_proof(1);
-    assert!(a.verify_at_checkpoint(4, 1, b"1", p4, l4, r4));
-    assert!(b.verify_at_checkpoint(4, 1, b"1", p4, l4, r4));
-    // but leaf 4 cannot be proven at checkpoint 4 of either (position 5 > 4: abort, see o04b)
+    assert!(a.verify_at_anchor(4, 1, b"1", p4, l4, r4));
+    assert!(b.verify_at_anchor(4, 1, b"1", p4, l4, r4));
+    // but leaf 4 cannot be proven at anchor 4 of either (position 5 > 4: abort, see o04b)
     // and A's size-7 proof of leaf 1 is false against B's current root
     let (p7, l7, r7) = ns_a.single_proof(1);
     assert!(a.verify(1, b"1", p7, l7, r7));
@@ -842,32 +843,32 @@ fun o04_cross_anchor() {
 }
 
 #[test, expected_failure(abort_code = mmr_proof::EPositionOutOfRange)]
-fun o04b_cross_anchor_leaf_4_at_checkpoint_4() {
+fun o04b_cross_anchor_leaf_4_at_anchor_4() {
     let ctx = &mut tx_context::dummy();
-    let (mut a, admin_a, cap_a) = setup(ctx);
+    let (mut a, _admin_a, cap_a) = setup(ctx);
     a.append_leaves(&cap_a, leaves_range(1, 3), ctx);
     a.append_leaves(&cap_a, vector[b"4"], ctx);
     let ns_a = mmr_prover::build(4);
     let (path, left, right) = ns_a.single_proof(5);
-    a.verify_at_checkpoint(4, 5, b"4", path, left, right);
-    teardown(a, admin_a, cap_a);
+    a.verify_at_anchor(4, 5, b"4", path, left, right);
+    abort
 }
 
 /// O05: empty MMR object: every position is out of range (single and batch).
 #[test, expected_failure(abort_code = mmr_proof::EPositionOutOfRange)]
 fun o05_empty_object_single() {
     let ctx = &mut tx_context::dummy();
-    let (mmr, admin, cap) = setup(ctx);
+    let (mmr, _admin, _cap) = setup(ctx);
     mmr.verify(1, b"1", vector[], vector[], vector[]);
-    teardown(mmr, admin, cap);
+    abort
 }
 
 #[test, expected_failure(abort_code = mmr_proof::EPositionOutOfRange)]
 fun o05b_empty_object_batch() {
     let ctx = &mut tx_context::dummy();
-    let (mmr, admin, cap) = setup(ctx);
+    let (mmr, _admin, _cap) = setup(ctx);
     mmr.verify_multiple(vector[1], vector[b"1"], vector[], vector[]);
-    teardown(mmr, admin, cap);
+    abort
 }
 
 /// O06: one-leaf object: honest true, wrong data false, the empty-root H("0") never matches.
@@ -881,7 +882,7 @@ fun o06_one_leaf_object() {
     assert!(!mmr.verify(1, mmr.root(), vector[], vector[], vector[]));
     assert!(mmr.verify_multiple(vector[1], vector[b"1"], vector[], vector[]));
     assert!(!mmr.verify_multiple(vector[1], vector[b"2"], vector[], vector[]));
-    assert!(mmr.verify_at_checkpoint(1, 1, b"1", vector[], vector[], vector[]));
+    assert!(mmr.verify_at_anchor(1, 1, b"1", vector[], vector[], vector[]));
     // sealing does not change verification
     mmr.seal(&admin);
     assert!(mmr.verify(1, b"1", vector[], vector[], vector[]));
@@ -890,7 +891,7 @@ fun o06_one_leaf_object() {
 }
 
 /// O07: after more appends, an old single proof is false against the current root but true at
-/// its checkpoint; a batch proof at the current size with a stale untouched peak is false.
+/// its anchor; a batch proof at the current size with a stale untouched peak is false.
 #[test]
 fun o07_stale_proofs() {
     let ctx = &mut tx_context::dummy();
@@ -906,20 +907,20 @@ fun o07_stale_proofs() {
     let ns4 = mmr_prover::build(4);
     assert!(!mmr.verify(1, b"1", vector[n(&ns3, 2), n(&ns3, 4)], vector[], vector[]));
     assert!(mmr.verify(1, b"1", vector[n(&ns4, 2), n(&ns4, 6)], vector[], vector[]));
-    assert!(mmr.verify_at_checkpoint(4, 1, b"1", p4, l4, r4));
+    assert!(mmr.verify_at_anchor(4, 1, b"1", p4, l4, r4));
     teardown(mmr, admin, cap);
 }
 
 #[test, expected_failure(abort_code = mmr_proof::EPathLength)]
 fun o07b_stale_single_proof_shape() {
     let ctx = &mut tx_context::dummy();
-    let (mut mmr, admin, cap) = setup(ctx);
+    let (mut mmr, _admin, cap) = setup(ctx);
     mmr.append_leaves(&cap, leaves_range(1, 3), ctx);
     let ns3 = mmr_prover::build(3);
     let (p4, l4, r4) = ns3.single_proof(1);
     mmr.append_leaves(&cap, leaves_range(4, 4), ctx);
     mmr.verify(1, b"1", p4, l4, r4);
-    teardown(mmr, admin, cap);
+    abort
 }
 
 // ============================================================================== traversal probe

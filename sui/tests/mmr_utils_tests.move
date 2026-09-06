@@ -5,7 +5,7 @@ use std::unit_test::assert_eq;
 use mmr::mmr_bits;
 use mmr::mmr_utils;
 
-/// Empty root `blake2b256("0")` (Python reference, spec H.2).
+/// Empty root `blake2b256("0")` (Python reference `scripts/mmr_ref.py`).
 const ROOT_0: vector<u8> = x"0fd923ca5e7218c4ba3c3801c26a617ecdbfdaebb9c76ce2eca166e7855efbb8";
 
 // ------------------------------------------------------------------------------ helpers
@@ -182,8 +182,9 @@ fun is_right_sibling_rejects_zero() {
 }
 
 // ------------------------------------------------------------------------------ u64 edges
-// Raw arithmetic aborts of the pure helpers (spec D.2 / E.3 preconditions). Unreachable through
-// every verifier: `EInvalidSize` / `EPositionOutOfRange` fire first.
+// Raw arithmetic aborts of the pure helpers (the documented preconditions of
+// `mmr_utils::get_height` and `mmr_utils::leaf_index_to_position`). Unreachable through every
+// verifier: `EInvalidSize` / `EPositionOutOfRange` fire first.
 
 #[test, expected_failure(arithmetic_error, location = mmr::mmr_bits)]
 fun get_height_u64_max_overflows() {
@@ -217,6 +218,38 @@ fun proof_positions_readme_example() {
     assert_eq!(last.local_tree_path_positions(), vector[]);
     assert_eq!(last.left_peaks_positions(), vector[15, 22]);
     assert_eq!(last.right_peaks_positions(), vector[]);
+}
+
+// The enforced preconditions of the proof-position helpers.
+
+#[test, expected_failure(abort_code = mmr_utils::EPositionOutOfRange)]
+fun calc_proof_tree_path_positions_rejects_zero() {
+    mmr_utils::calc_proof_tree_path_positions(0, 23);
+}
+
+#[test, expected_failure(abort_code = mmr_utils::EPositionOutOfRange)]
+fun calc_proof_tree_path_positions_rejects_beyond_size() {
+    mmr_utils::calc_proof_tree_path_positions(24, 23);
+}
+
+#[test, expected_failure(abort_code = mmr_utils::ENotALeaf)]
+fun calc_proof_positions_rejects_internal_node() {
+    mmr_utils::calc_proof_positions(3, 23);
+}
+
+#[test, expected_failure(abort_code = mmr_utils::EPositionOutOfRange)]
+fun calc_proof_positions_rejects_beyond_size() {
+    mmr_utils::calc_proof_positions(24, 23);
+}
+
+#[test, expected_failure(abort_code = mmr_utils::EStartsAtOne)]
+fun get_hashes_from_positions_rejects_zero() {
+    mmr_utils::get_hashes_from_positions(&vector[b"node-1"], &vector[0]);
+}
+
+#[test, expected_failure(abort_code = mmr_utils::EPositionOutOfRange)]
+fun get_hashes_from_positions_rejects_beyond_length() {
+    mmr_utils::get_hashes_from_positions(&vector[b"node-1"], &vector[2]);
 }
 
 /// The path of every leaf of every leaf count 1..32 climbs to its local peak: path entry i is the
@@ -280,7 +313,7 @@ fun get_hashes_from_positions_reads_by_reference() {
     let nodes = vector[n1, n2, n3, n4];
     let positions = vector[3, 1];
     assert_eq!(mmr_utils::get_hashes_from_positions(&nodes, &positions), vector[n3, n1]);
-    // the inputs are untouched
-    assert_eq!(nodes.length(), 4);
-    assert_eq!(positions, vector[3, 1]);
+    // repeated positions are read again, in the order given
+    let repeated = vector[2, 2, 1];
+    assert_eq!(mmr_utils::get_hashes_from_positions(&nodes, &repeated), vector[n2, n2, n1]);
 }

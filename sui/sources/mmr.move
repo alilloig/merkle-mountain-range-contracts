@@ -1,12 +1,13 @@
 /// Merkle Mountain Range as a shared, capability-gated, append-only accumulator.
 ///
 /// The object stores only the current peaks, root, size and leaf count (O(log n)) plus one
-/// checkpoint `(size -> root, peaks, ...)` per append batch. Proof generation happens off-chain
+/// anchor `(size -> root, peaks, ...)` per append batch. Proof generation happens off-chain
 /// from the `LeavesAppendedEvent` stream (or any node set rebuilt from it); verification happens
-/// on-chain against the object's current root or against a recorded checkpoint.
+/// on-chain against the object's current root or against a recorded anchor.
 ///
-/// Writes need an `AppendCap` minted for this MMR by its `AdminCap`; reads and verification are
-/// permissionless and never version-gated. Every MMR is a shared object.
+/// Appends need an `AppendCap` minted for this MMR by its `AdminCap`; capability management and
+/// sealing need the `AdminCap`; reads and verification are permissionless and never
+/// version-gated. Every MMR is a shared object.
 module mmr::mmr;
 
 use std::string::String;
@@ -19,13 +20,13 @@ use mmr::mmr_utils;
 /// Method aliases (documented idiom: prefixed function + public alias).
 public use fun admin_cap_mmr_id as AdminCap.mmr_id;
 public use fun append_cap_mmr_id as AppendCap.mmr_id;
-public use fun checkpoint_size as Checkpoint.size;
-public use fun checkpoint_leaf_count as Checkpoint.leaf_count;
-public use fun checkpoint_root as Checkpoint.root;
-public use fun checkpoint_peaks as Checkpoint.peaks;
-public use fun checkpoint_batch_index as Checkpoint.batch_index;
-public use fun checkpoint_epoch as Checkpoint.epoch;
-public use fun checkpoint_cap_id as Checkpoint.cap_id;
+public use fun anchor_size as Anchor.size;
+public use fun anchor_leaf_count as Anchor.leaf_count;
+public use fun anchor_root as Anchor.root;
+public use fun anchor_peaks as Anchor.peaks;
+public use fun anchor_batch_index as Anchor.batch_index;
+public use fun anchor_epoch as Anchor.epoch;
+public use fun anchor_cap_id as Anchor.cap_id;
 
 /// Package version stamped into every MMR; bump together with `migrate`.
 const VERSION: u64 = 1;
@@ -33,6 +34,8 @@ const VERSION: u64 = 1;
 const MAX_APPEND_CAPS: u64 = 64;
 /// Upper bound on `label` in bytes (`String::length()` counts bytes).
 const MAX_LABEL_LENGTH: u64 = 128;
+/// Upper bound on leaves per `append_leaves` call.
+const MAX_BATCH_LEAVES: u64 = 1000;
 
 /// A capability was issued for a different MMR.
 #[error]
@@ -52,9 +55,12 @@ const ELabelTooLong: vector<u8> = b"Label must be at most 128 bytes";
 /// `append_leaves` called with no leaves.
 #[error]
 const EEmptyBatch: vector<u8> = b"Batch must contain at least one leaf";
+/// `append_leaves` called with more than `MAX_BATCH_LEAVES` leaves.
+#[error]
+const EBatchTooLarge: vector<u8> = b"Batch must contain at most 1000 leaves";
 /// No append batch ended exactly at that size.
 #[error]
-const ENoCheckpoint: vector<u8> = b"No checkpoint recorded at this size";
+const ENoAnchor: vector<u8> = b"No anchor recorded at this size";
 /// Object version does not match the package version; run `migrate`.
 #[error]
 const EWrongVersion: vector<u8> = b"MMR version does not match the package version";
@@ -68,18 +74,20 @@ const ENotIncluded: vector<u8> = b"Inclusion proof failed";
 // ------------------------------------------------------------------------------ objects
 
 /// The accumulator. Always a shared object (no `store`: the only storage path is `share`).
-/// State is O(log n): peaks, root, counters, plus one dynamic-field checkpoint per append batch.
+/// State is O(log n): peaks, root, counters, plus one dynamic-field anchor per append batch.
 ///
 /// Invariants (hold after every public call):
 ///   peaks == hashes of the nodes at get_peaks_positions(size), left to right (<= 63 entries)
 ///   root  == H(size, peaks); H("0") when size == 0
-///   for the current size > 0: checkpoints[size].root == root and checkpoints[size].peaks == peaks
-///   every key of `checkpoints` is a valid MMR size; keys strictly increase in insertion order;
+///   for the current size > 0: anchors[size].root == root and anchors[size].peaks == peaks
+///   every key of `anchors` is a valid MMR size; keys strictly increase in insertion order;
 ///   rows are never modified or removed
 ///   append_caps.length() <= MAX_APPEND_CAPS
 public struct MMR has key {
     id: UID,
-    /// Layout/semantics version. Checked by every write; never by reads or verifiers.
+    /// Layout/semantics version. Checked by every rights-granting write (`append_leaves`,
+    /// `mint_append_cap`, `revoke_append_cap`, `seal`); not by `destroy_append_cap`, `migrate`,
+    /// reads or verifiers.
     version: u64,
     /// Operator-chosen name (<= MAX_LABEL_LENGTH bytes). Identity for indexers and explorers.
     label: String,
@@ -92,7 +100,7 @@ public struct MMR has key {
     /// H(size || peaks); H("0") when empty.
     root: vector<u8>,
     /// One row per non-empty append batch, keyed by the size right after the batch.
-    checkpoints: Table<u64, Checkpoint>,
+    anchors: Table<u64, Anchor>,
     /// Ids of the AppendCaps that may currently append.
     append_caps: VecSet<ID>,
     /// True once `seal` was called; no further appends are accepted.
@@ -100,16 +108,18 @@ public struct MMR has key {
 }
 
 /// Historical anchor written after one append batch. Never modified or removed.
-public struct Checkpoint has copy, drop, store {
-    /// Node count at this checkpoint (also the table key; kept so a returned copy is self-describing).
+/// Named "anchor", not "checkpoint": "checkpoint" is a Sui protocol term (a certified batch of
+/// transactions); an anchor is this package's per-batch commitment `(size, root, peaks, ...)`.
+public struct Anchor has copy, drop, store {
+    /// Node count at this anchor (also the table key; kept so a returned copy is self-describing).
     size: u64,
-    /// Leaf count at this checkpoint.
+    /// Leaf count at this anchor.
     leaf_count: u64,
-    /// H(size || peaks) at this checkpoint.
+    /// H(size || peaks) at this anchor.
     root: vector<u8>,
-    /// Peak hashes at this checkpoint, left to right.
+    /// Peak hashes at this anchor, left to right.
     peaks: vector<vector<u8>>,
-    /// 0-based index of the append batch that wrote this checkpoint (== checkpoints written before it).
+    /// 0-based index of the append batch that wrote this anchor (== anchors written before it).
     batch_index: u64,
     /// Sui epoch (`ctx.epoch()`) of the append transaction.
     epoch: u64,
@@ -134,12 +144,12 @@ public struct MMRCreatedEvent has copy, drop {
     admin_cap_id: ID,
 }
 
-/// One append batch was committed and one checkpoint recorded.
+/// One append batch was committed and one anchor recorded.
 public struct LeavesAppendedEvent has copy, drop {
     mmr_id: ID,
     /// The AppendCap that appended (writer audit trail).
     cap_id: ID,
-    /// 0-based index of this batch (== Checkpoint.batch_index == checkpoint key order).
+    /// 0-based index of this batch (== Anchor.batch_index == anchor key order).
     batch_index: u64,
     /// 0-based leaf index of the first leaf of this batch.
     first_leaf_index: u64,
@@ -147,13 +157,13 @@ public struct LeavesAppendedEvent has copy, drop {
     batch_leaf_count: u64,
     /// Total leaf count after this batch.
     leaf_count: u64,
-    /// Node count before and after this batch. `new_size` is the checkpoint key.
+    /// Node count before and after this batch. `new_size` is the anchor key.
     old_size: u64,
     new_size: u64,
     /// Position-bound leaf hashes H(position || data), in append order. An indexer rebuilds every
     /// internal node from these alone; raw leaves stay in the transaction inputs.
     leaf_hashes: vector<vector<u8>>,
-    /// Peaks and root after this batch (the checkpoint contents).
+    /// Peaks and root after this batch (the anchor contents).
     peaks: vector<vector<u8>>,
     root: vector<u8>,
     /// Sui epoch of the append transaction.
@@ -185,7 +195,7 @@ public fun new(label: String, ctx: &mut TxContext): (MMR, AdminCap) {
         leaf_count: 0,
         peaks: vector[],
         root: mmr_utils::hash_with_integer(0, vector[]),
-        checkpoints: table::new(ctx),
+        anchors: table::new(ctx),
         append_caps: vec_set::empty(),
         sealed: false,
     };
@@ -259,11 +269,14 @@ public fun destroy_append_cap(mmr: &mut MMR, cap: AppendCap) {
 }
 
 /// Permanently stop appends. Reads and verification keep working. Admin only.
-/// Emits `MMRSealedEvent`. Idempotent (sealing twice emits twice and changes nothing).
+/// Emits `MMRSealedEvent` on the transition from open to sealed. Idempotent: a second call
+/// changes nothing and emits nothing.
 public fun seal(mmr: &mut MMR, admin: &AdminCap) {
     mmr.assert_admin(admin);
-    mmr.sealed = true;
-    event::emit(MMRSealedEvent { mmr_id: mmr.id.to_inner(), size: mmr.size, root: mmr.root });
+    if (!mmr.sealed) {
+        mmr.sealed = true;
+        event::emit(MMRSealedEvent { mmr_id: mmr.id.to_inner(), size: mmr.size, root: mmr.root });
+    };
 }
 
 /// Bring an MMR created by an older package version up to `VERSION`. Admin only.
@@ -284,11 +297,12 @@ public fun append_cap_mmr_id(cap: &AppendCap): ID { cap.mmr_id }
 
 // ------------------------------------------------------------------------------ append
 
-/// Append `leaves` in order. Records one checkpoint keyed by the new size and emits one
+/// Append `leaves` in order. Records one anchor keyed by the new size and emits one
 /// `LeavesAppendedEvent`. Returns the 0-based leaf index of the first appended leaf (Move
 /// callers learn the indices their records got; PTB callers may ignore it).
 /// Requires an active AppendCap of this MMR. Aborts with `EWrongVersion`, `EWrongMMR`,
-/// `ECapNotActive`, `ESealed`, or `EEmptyBatch`.
+/// `ECapNotActive`, `ESealed`, `EEmptyBatch`, or `EBatchTooLarge` (more than `MAX_BATCH_LEAVES`
+/// leaves).
 /// Hashing: leaf = H(position, [data]); node = H(position, [left, right]);
 /// root = H(size, peaks) computed once per batch.
 public fun append_leaves(
@@ -304,35 +318,36 @@ public fun append_leaves(
     // Bound BEFORE the consuming loop: reading `leaves.length()` afterwards would make the
     // compiler copy the whole batch.
     let batch_leaf_count = leaves.length();
+    assert!(batch_leaf_count <= MAX_BATCH_LEAVES, EBatchTooLarge);
     let cap_id = cap.id.to_inner();
     let mut leaf_hashes = vector[];
     leaves.do!(|leaf| leaf_hashes.push_back(mmr.append_leaf(leaf)));
     // Root once per batch: intermediate roots are never observable.
     mmr.root = mmr_utils::hash_with_integer(mmr.size, mmr.peaks);
-    let batch_index = mmr.checkpoints.length();
-    let epoch = ctx.epoch();
-    mmr.checkpoints.add(mmr.size, Checkpoint {
+    // The anchor row is built once; the event carries the same values.
+    let row = Anchor {
         size: mmr.size,
         leaf_count: mmr.leaf_count,
         root: mmr.root,
         peaks: mmr.peaks,
-        batch_index,
-        epoch,
+        batch_index: mmr.anchors.length(),
+        epoch: ctx.epoch(),
         cap_id,
-    });
+    };
+    mmr.anchors.add(mmr.size, row);
     event::emit(LeavesAppendedEvent {
         mmr_id: mmr.id.to_inner(),
         cap_id,
-        batch_index,
+        batch_index: row.batch_index,
         first_leaf_index,
         batch_leaf_count,
-        leaf_count: mmr.leaf_count,
+        leaf_count: row.leaf_count,
         old_size,
-        new_size: mmr.size,
+        new_size: row.size,
         leaf_hashes,
-        peaks: mmr.peaks,
-        root: mmr.root,
-        epoch,
+        peaks: row.peaks,
+        root: row.root,
+        epoch: row.epoch,
     });
     first_leaf_index
 }
@@ -376,11 +391,11 @@ public fun verify(
     ) == mmr.root
 }
 
-/// Same as `verify`, against the checkpoint recorded when the MMR had `size` nodes. All position
-/// math uses `size`; the stored root is the only comparison target. Aborts with `ENoCheckpoint`
-/// when no batch ended exactly at `size`. A proof issued at checkpoint `size` verifies here
+/// Same as `verify`, against the anchor recorded when the MMR had `size` nodes. All position
+/// math uses `size`; the stored root is the only comparison target. Aborts with `ENoAnchor`
+/// when no batch ended exactly at `size`. A proof issued at anchor `size` verifies here
 /// forever, regardless of later appends. Not version-gated.
-public fun verify_at_checkpoint(
+public fun verify_at_anchor(
     mmr: &MMR,
     size: u64,
     position: u64,
@@ -407,9 +422,9 @@ public fun verify_multiple(
     ) == mmr.root
 }
 
-/// Verify a batch inclusion proof against the checkpoint recorded at `size`.
-/// Aborts with `ENoCheckpoint` when no batch ended exactly at `size`. Not version-gated.
-public fun verify_multiple_at_checkpoint(
+/// Verify a batch inclusion proof against the anchor recorded at `size`.
+/// Aborts with `ENoAnchor` when no batch ended exactly at `size`. Not version-gated.
+public fun verify_multiple_at_anchor(
     mmr: &MMR,
     size: u64,
     positions: vector<u64>,
@@ -431,7 +446,72 @@ public fun assert_included(verified: bool) {
     assert!(verified, ENotIncluded);
 }
 
+/// `verify` that aborts with `ENotIncluded` instead of returning `false`. For Move callers that
+/// must not drop a `bool`: the check runs inside this module on the pinned `&MMR`, so there is
+/// no result for the caller to mishandle. Malformed proofs abort with `mmr_proof::E*` as usual.
+public fun assert_verify(
+    mmr: &MMR,
+    position: u64,
+    leaf: vector<u8>,
+    path: vector<vector<u8>>,
+    left_peaks: vector<vector<u8>>,
+    right_peaks: vector<vector<u8>>,
+) {
+    let ok = mmr.verify(position, leaf, path, left_peaks, right_peaks);
+    assert!(ok, ENotIncluded);
+}
+
+/// `verify_at_anchor` that aborts with `ENotIncluded` instead of returning `false` (and with
+/// `ENoAnchor` when no batch ended at `size`). For Move callers that must not drop a `bool`.
+public fun assert_verify_at_anchor(
+    mmr: &MMR,
+    size: u64,
+    position: u64,
+    leaf: vector<u8>,
+    path: vector<vector<u8>>,
+    left_peaks: vector<vector<u8>>,
+    right_peaks: vector<vector<u8>>,
+) {
+    let ok = mmr.verify_at_anchor(size, position, leaf, path, left_peaks, right_peaks);
+    assert!(ok, ENotIncluded);
+}
+
+/// `verify_multiple` that aborts with `ENotIncluded` instead of returning `false`. For Move
+/// callers that must not drop a `bool`.
+public fun assert_verify_multiple(
+    mmr: &MMR,
+    positions: vector<u64>,
+    leaves: vector<vector<u8>>,
+    siblings: vector<vector<u8>>,
+    untouched_peaks: vector<vector<u8>>,
+) {
+    let ok = mmr.verify_multiple(positions, leaves, siblings, untouched_peaks);
+    assert!(ok, ENotIncluded);
+}
+
+/// `verify_multiple_at_anchor` that aborts with `ENotIncluded` instead of returning `false`
+/// (and with `ENoAnchor` when no batch ended at `size`). For Move callers that must not drop a
+/// `bool`.
+public fun assert_verify_multiple_at_anchor(
+    mmr: &MMR,
+    size: u64,
+    positions: vector<u64>,
+    leaves: vector<vector<u8>>,
+    siblings: vector<vector<u8>>,
+    untouched_peaks: vector<vector<u8>>,
+) {
+    let ok = mmr.verify_multiple_at_anchor(size, positions, leaves, siblings, untouched_peaks);
+    assert!(ok, ENotIncluded);
+}
+
 // ------------------------------------------------------------------------------ getters
+
+/// The package version stamped into every new MMR (`VERSION`). An object whose `version` differs
+/// needs `migrate` before any rights-granting write.
+public fun package_version(): u64 { VERSION }
+
+/// Upper bound on active AppendCaps per MMR (`MAX_APPEND_CAPS`).
+public fun max_append_caps(): u64 { MAX_APPEND_CAPS }
 
 /// Current root.
 public fun root(mmr: &MMR): vector<u8> { mmr.root }
@@ -454,23 +534,23 @@ public fun version(mmr: &MMR): u64 { mmr.version }
 /// True once `seal` was called.
 public fun is_sealed(mmr: &MMR): bool { mmr.sealed }
 
-/// Number of recorded checkpoints (== number of append batches).
-public fun checkpoint_count(mmr: &MMR): u64 { mmr.checkpoints.length() }
+/// Number of recorded anchors (== number of append batches).
+public fun anchor_count(mmr: &MMR): u64 { mmr.anchors.length() }
 
 /// True when a batch ended exactly at `size`.
-public fun has_checkpoint(mmr: &MMR, size: u64): bool { mmr.checkpoints.contains(size) }
+public fun has_anchor(mmr: &MMR, size: u64): bool { mmr.anchors.contains(size) }
 
-/// The checkpoint recorded at `size`, by value. Aborts with `ENoCheckpoint` if there is none.
-public fun checkpoint(mmr: &MMR, size: u64): Checkpoint {
-    assert!(mmr.checkpoints.contains(size), ENoCheckpoint);
-    *mmr.checkpoints.borrow(size)
+/// The anchor recorded at `size`, by value. Aborts with `ENoAnchor` if there is none.
+public fun anchor(mmr: &MMR, size: u64): Anchor {
+    assert!(mmr.anchors.contains(size), ENoAnchor);
+    *mmr.anchors.borrow(size)
 }
 
-/// The root recorded at `size`. Aborts with `ENoCheckpoint` if there is none.
-/// One `table::borrow`; only the 32-byte root is copied, never the whole row.
+/// The root recorded at `size`. Aborts with `ENoAnchor` if there is none.
+/// One `contains` and one `borrow`; only the 32-byte root is copied, never the whole row.
 public fun root_at(mmr: &MMR, size: u64): vector<u8> {
-    assert!(mmr.checkpoints.contains(size), ENoCheckpoint);
-    mmr.checkpoints.borrow(size).root
+    assert!(mmr.anchors.contains(size), ENoAnchor);
+    mmr.anchors.borrow(size).root
 }
 
 /// Ids of the currently active AppendCaps.
@@ -479,31 +559,31 @@ public fun append_cap_ids(mmr: &MMR): vector<ID> { *mmr.append_caps.keys() }
 /// True when `cap_id` may append to this MMR.
 public fun is_append_cap_active(mmr: &MMR, cap_id: ID): bool { mmr.append_caps.contains(&cap_id) }
 
-/// Node count at the checkpoint (alias `cp.size()`).
-public fun checkpoint_size(cp: &Checkpoint): u64 { cp.size }
+/// Node count at the anchor (alias `cp.size()`).
+public fun anchor_size(cp: &Anchor): u64 { cp.size }
 
-/// Leaf count at the checkpoint (alias `cp.leaf_count()`).
-public fun checkpoint_leaf_count(cp: &Checkpoint): u64 { cp.leaf_count }
+/// Leaf count at the anchor (alias `cp.leaf_count()`).
+public fun anchor_leaf_count(cp: &Anchor): u64 { cp.leaf_count }
 
-/// Root at the checkpoint (alias `cp.root()`).
-public fun checkpoint_root(cp: &Checkpoint): vector<u8> { cp.root }
+/// Root at the anchor (alias `cp.root()`).
+public fun anchor_root(cp: &Anchor): vector<u8> { cp.root }
 
-/// Peak hashes at the checkpoint, left to right (alias `cp.peaks()`).
-public fun checkpoint_peaks(cp: &Checkpoint): vector<vector<u8>> { cp.peaks }
+/// Peak hashes at the anchor, left to right (alias `cp.peaks()`).
+public fun anchor_peaks(cp: &Anchor): vector<vector<u8>> { cp.peaks }
 
-/// 0-based index of the append batch that wrote the checkpoint (alias `cp.batch_index()`).
-public fun checkpoint_batch_index(cp: &Checkpoint): u64 { cp.batch_index }
+/// 0-based index of the append batch that wrote the anchor (alias `cp.batch_index()`).
+public fun anchor_batch_index(cp: &Anchor): u64 { cp.batch_index }
 
 /// Sui epoch of the append batch (alias `cp.epoch()`).
-public fun checkpoint_epoch(cp: &Checkpoint): u64 { cp.epoch }
+public fun anchor_epoch(cp: &Anchor): u64 { cp.epoch }
 
 /// Id of the AppendCap that wrote the batch (alias `cp.cap_id()`).
-public fun checkpoint_cap_id(cp: &Checkpoint): ID { cp.cap_id }
+public fun anchor_cap_id(cp: &Anchor): ID { cp.cap_id }
 
 // ------------------------------------------------------------------------------ private
 
 /// `EWrongVersion` unless the object is at the package version. Not called by
-/// `destroy_append_cap`.
+/// `destroy_append_cap` or `migrate`.
 fun assert_version(mmr: &MMR) {
     assert!(mmr.version == VERSION, EWrongVersion);
 }

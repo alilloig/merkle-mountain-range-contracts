@@ -9,6 +9,14 @@ module mmr::mmr_prover;
 
 use mmr::mmr_utils;
 
+/// `batch_proof` input checks. Test-only: a bad fixture fails here, before the verifier runs.
+#[error]
+const EPositionsNotSorted: vector<u8> = b"prover: positions must be strictly increasing";
+#[error]
+const EPositionOutOfRange: vector<u8> = b"prover: position is beyond the node set";
+#[error]
+const ENotALeaf: vector<u8> = b"prover: position is not a leaf";
+
 /// Full node set: `nodes[position - 1]` is the hash of the node at `position`.
 public struct NodeSet has drop {
     nodes: vector<vector<u8>>,
@@ -72,13 +80,22 @@ public fun single_proof(
 }
 
 /// Batch proof for strictly increasing leaf `positions`: (siblings, untouched_peaks).
-/// The verifier's traversal (spec F.4) with "record" instead of "read" at the single decision
-/// point. Never hashes.
+/// The verifier's traversal (`mmr_proof::root_from_batch_proof`) with "record" instead of
+/// "read" at the single decision point. Never hashes.
+/// Input checks (test-only constants of this module, not application errors): aborts with
+/// `EPositionsNotSorted`, `EPositionOutOfRange` or `ENotALeaf`.
 public fun batch_proof(
     ns: &NodeSet,
     positions: vector<u64>,
 ): (vector<vector<u8>>, vector<vector<u8>>) {
     let size = ns.size();
+    let mut prev = 0;
+    positions.do_ref!(|p| {
+        assert!(*p > prev, EPositionsNotSorted);
+        assert!(*p <= size, EPositionOutOfRange);
+        assert!(mmr_utils::get_height(*p) == 1, ENotALeaf);
+        prev = *p;
+    });
     let peaks_positions = mmr_utils::get_peaks_positions(size);
     let mut siblings = vector[];
     let mut untouched = vector[];

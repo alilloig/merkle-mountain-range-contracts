@@ -38,53 +38,46 @@ fun mint_activates_and_emits() {
 #[test, expected_failure(abort_code = mmr::EWrongMMR)]
 fun append_rejects_cap_of_another_mmr() {
     let ctx = &mut tx_context::dummy();
-    let (mut a, admin_a, cap_a) = setup(ctx);
-    let (b, admin_b, cap_b) = setup(ctx);
+    let (mut a, _admin_a, _cap_a) = setup(ctx);
+    let (_b, _admin_b, cap_b) = setup(ctx);
     a.append_leaves(&cap_b, vector[b"x"], ctx);
-    teardown(a, admin_a, cap_a);
-    teardown(b, admin_b, cap_b);
+    abort
 }
 
 #[test, expected_failure(abort_code = mmr::EWrongMMR)]
 fun mint_rejects_admin_of_another_mmr() {
     let ctx = &mut tx_context::dummy();
-    let (mut a, admin_a, cap_a) = setup(ctx);
-    let (b, admin_b, cap_b) = setup(ctx);
-    let cap = a.mint_append_cap(&admin_b, ctx);
-    destroy(cap);
-    teardown(a, admin_a, cap_a);
-    teardown(b, admin_b, cap_b);
+    let (mut a, _admin_a, _cap_a) = setup(ctx);
+    let (_b, admin_b, _cap_b) = setup(ctx);
+    let _cap = a.mint_append_cap(&admin_b, ctx);
+    abort
 }
 
 #[test, expected_failure(abort_code = mmr::EWrongMMR)]
 fun revoke_rejects_admin_of_another_mmr() {
     let ctx = &mut tx_context::dummy();
-    let (mut a, admin_a, cap_a) = setup(ctx);
-    let (b, admin_b, cap_b) = setup(ctx);
+    let (mut a, _admin_a, cap_a) = setup(ctx);
+    let (_b, admin_b, _cap_b) = setup(ctx);
     a.revoke_append_cap(&admin_b, object::id(&cap_a));
-    teardown(a, admin_a, cap_a);
-    teardown(b, admin_b, cap_b);
+    abort
 }
 
 #[test, expected_failure(abort_code = mmr::EWrongMMR)]
 fun seal_rejects_admin_of_another_mmr() {
     let ctx = &mut tx_context::dummy();
-    let (mut a, admin_a, cap_a) = setup(ctx);
-    let (b, admin_b, cap_b) = setup(ctx);
+    let (mut a, _admin_a, _cap_a) = setup(ctx);
+    let (_b, admin_b, _cap_b) = setup(ctx);
     a.seal(&admin_b);
-    teardown(a, admin_a, cap_a);
-    teardown(b, admin_b, cap_b);
+    abort
 }
 
 #[test, expected_failure(abort_code = mmr::EWrongMMR)]
 fun destroy_append_cap_rejects_other_mmr() {
     let ctx = &mut tx_context::dummy();
-    let (mut a, admin_a, cap_a) = setup(ctx);
-    let (b, admin_b, cap_b) = setup(ctx);
+    let (mut a, _admin_a, _cap_a) = setup(ctx);
+    let (_b, _admin_b, cap_b) = setup(ctx);
     a.destroy_append_cap(cap_b);
-    teardown(a, admin_a, cap_a);
-    destroy(b);
-    destroy(admin_b);
+    abort
 }
 
 /// The registry is per object: a cap of B is never active on A, whatever its id.
@@ -113,18 +106,18 @@ fun append_rejects_revoked_cap() {
     assert!(!mmr.is_append_cap_active(object::id(&cap)));
     assert_eq!(mmr.append_cap_ids(), vector[]);
     mmr.append_leaves(&cap, vector[b"x"], ctx);
-    teardown(mmr, admin, cap);
+    abort
 }
 
 #[test, expected_failure(abort_code = mmr::ECapNotActive)]
 fun revoke_rejects_unknown_cap() {
     let ctx = &mut tx_context::dummy();
-    let (mut mmr, admin, cap) = setup(ctx);
+    let (mut mmr, admin, _cap) = setup(ctx);
     // a fresh id that was never minted
     let unknown = object::id_from_address(@0x1);
     assert!(!mmr.is_append_cap_active(unknown));
     mmr.revoke_append_cap(&admin, unknown);
-    teardown(mmr, admin, cap);
+    abort
 }
 
 #[test, expected_failure(abort_code = mmr::ECapNotActive)]
@@ -133,16 +126,16 @@ fun revoke_rejects_already_revoked_cap() {
     let (mut mmr, admin, cap) = setup(ctx);
     mmr.revoke_append_cap(&admin, object::id(&cap));
     mmr.revoke_append_cap(&admin, object::id(&cap));
-    teardown(mmr, admin, cap);
+    abort
 }
 
 /// The admin cap's own id is not an append cap id.
 #[test, expected_failure(abort_code = mmr::ECapNotActive)]
 fun revoke_rejects_admin_cap_id() {
     let ctx = &mut tx_context::dummy();
-    let (mut mmr, admin, cap) = setup(ctx);
+    let (mut mmr, admin, _cap) = setup(ctx);
     mmr.revoke_append_cap(&admin, object::id(&admin));
-    teardown(mmr, admin, cap);
+    abort
 }
 
 #[test]
@@ -204,8 +197,7 @@ fun revoke_rejects_destroyed_cap() {
     let cap_id = object::id(&cap);
     mmr.destroy_append_cap(cap);
     mmr.revoke_append_cap(&admin, cap_id);
-    destroy(mmr);
-    destroy(admin);
+    abort
 }
 
 // ------------------------------------------------------------------------------ cap limit
@@ -221,7 +213,7 @@ fun mint_up_to_the_cap_limit() {
     destroy(admin);
 }
 
-/// Every one of 64 active caps appends once; the last checkpoint names the last cap.
+/// Every one of 64 active caps appends once; the last anchor names the last cap.
 #[test]
 fun every_active_cap_can_append() {
     let ctx = &mut tx_context::dummy();
@@ -233,8 +225,8 @@ fun every_active_cap_can_append() {
     assert_eq!(mmr.leaf_count(), 64);
     // 64 leaves fill one perfect tree of 127 nodes
     assert_eq!(mmr.size(), 127);
-    assert_eq!(mmr.checkpoint_count(), 64);
-    assert_eq!(mmr.checkpoint(127).cap_id(), object::id(&caps[63]));
+    assert_eq!(mmr.anchor_count(), 64);
+    assert_eq!(mmr.anchor(127).cap_id(), object::id(&caps[63]));
     caps.destroy!(|cap| destroy(cap));
     destroy(mmr);
     destroy(admin);
@@ -246,9 +238,8 @@ fun mint_rejects_too_many_caps() {
     let (mut mmr, admin) = mmr::new(b"log".to_string(), ctx);
     64u64.do!(|_| destroy(mmr.mint_append_cap(&admin, ctx)));
     // the 65th
-    destroy(mmr.mint_append_cap(&admin, ctx));
-    destroy(mmr);
-    destroy(admin);
+    let _cap = mmr.mint_append_cap(&admin, ctx);
+    abort
 }
 
 #[test]
@@ -269,6 +260,26 @@ fun rotate_at_cap_limit_revoke_then_mint() {
     teardown(mmr, admin, cap);
 }
 
+/// Burning an active cap at the limit frees its slot: the next mint succeeds without a revoke.
+#[test]
+fun destroy_at_cap_limit_frees_a_slot() {
+    let ctx = &mut tx_context::dummy();
+    let (mut mmr, admin, cap) = setup(ctx);
+    let extra = vector::tabulate!(63, |_| mmr.mint_append_cap(&admin, ctx));
+    assert_eq!(mmr.append_cap_ids().length(), 64);
+    let cap_id = object::id(&cap);
+    mmr.destroy_append_cap(cap);
+    assert_eq!(mmr.append_cap_ids().length(), 63);
+    let new_cap = mmr.mint_append_cap(&admin, ctx);
+    assert_eq!(mmr.append_cap_ids().length(), 64);
+    assert!(mmr.is_append_cap_active(object::id(&new_cap)));
+    assert!(!mmr.is_append_cap_active(cap_id));
+    extra.destroy!(|c| destroy(c));
+    destroy(new_cap);
+    destroy(mmr);
+    destroy(admin);
+}
+
 // ------------------------------------------------------------------------------ seal
 
 #[test, expected_failure(abort_code = mmr::ESealed)]
@@ -285,17 +296,16 @@ fun append_rejects_sealed() {
     assert_eq!(size, 23);
     assert_eq!(root, mmr.root());
     mmr.append_leaves(&cap, vector[b"y"], ctx);
-    teardown(mmr, admin, cap);
+    abort
 }
 
 #[test, expected_failure(abort_code = mmr::ESealed)]
 fun mint_rejects_sealed() {
     let ctx = &mut tx_context::dummy();
-    let (mut mmr, admin, cap) = setup(ctx);
+    let (mut mmr, admin, _cap) = setup(ctx);
     mmr.seal(&admin);
-    let cap2 = mmr.mint_append_cap(&admin, ctx);
-    destroy(cap2);
-    teardown(mmr, admin, cap);
+    let _cap2 = mmr.mint_append_cap(&admin, ctx);
+    abort
 }
 
 #[test]
@@ -304,16 +314,16 @@ fun sealed_mmr_still_verifies() {
     let (mut mmr, admin, cap) = setup(ctx);
     mmr.append_leaves(&cap, mmr_prover::leaves(13), ctx);
     mmr.seal(&admin);
-    // sealing twice emits twice and changes nothing
+    // sealing twice changes nothing and emits nothing: one event, for the transition
     mmr.seal(&admin);
     assert!(mmr.is_sealed());
-    assert_eq!(event::events_by_type<mmr::MMRSealedEvent>().length(), 2);
+    assert_eq!(event::events_by_type<mmr::MMRSealedEvent>().length(), 1);
     let ns = mmr_prover::build(13);
     assert_eq!(ns.root(), mmr.root());
     let (path, left, right) = ns.single_proof(16);
     assert!(mmr.verify(16, b"9", path, left, right));
-    assert!(mmr.verify_at_checkpoint(23, 16, b"9", path, left, right));
-    assert_eq!(mmr.checkpoint(23).size(), 23);
+    assert!(mmr.verify_at_anchor(23, 16, b"9", path, left, right));
+    assert_eq!(mmr.anchor(23).size(), 23);
     assert_eq!(mmr.root_at(23), mmr.root());
     // an already minted cap can still be destroyed
     let cap_id = object::id(&cap);
@@ -332,29 +342,28 @@ fun wrong_version_blocks_revoke_seal() {
     let (mut mmr, admin, cap) = setup(ctx);
     mmr.set_version_for_testing(0);
     mmr.revoke_append_cap(&admin, object::id(&cap));
-    teardown(mmr, admin, cap);
+    abort
 }
 
 #[test, expected_failure(abort_code = mmr::EWrongVersion)]
 fun wrong_version_blocks_seal() {
     let ctx = &mut tx_context::dummy();
-    let (mut mmr, admin, cap) = setup(ctx);
+    let (mut mmr, admin, _cap) = setup(ctx);
     mmr.set_version_for_testing(0);
     mmr.seal(&admin);
-    teardown(mmr, admin, cap);
+    abort
 }
 
-/// The version guard runs before the admin check (spec F.6 order: `assert_version`, then
+/// The version guard runs before the admin check (`assert_admin` order: `assert_version`, then
 /// `EWrongMMR`): a foreign admin on an un-migrated object still fails with `EWrongVersion`.
 #[test, expected_failure(abort_code = mmr::EWrongVersion)]
 fun wrong_version_is_checked_before_admin_identity() {
     let ctx = &mut tx_context::dummy();
-    let (mut a, admin_a, cap_a) = setup(ctx);
-    let (b, admin_b, cap_b) = setup(ctx);
+    let (mut a, _admin_a, _cap_a) = setup(ctx);
+    let (_b, admin_b, _cap_b) = setup(ctx);
     a.set_version_for_testing(0);
     a.seal(&admin_b);
-    teardown(a, admin_a, cap_a);
-    teardown(b, admin_b, cap_b);
+    abort
 }
 
 #[test]
@@ -398,7 +407,7 @@ fun shared_flow_second_sender_verifies() {
     let (path, left, right) = ns.single_proof(16);
     assert!(alice_mmr.verify(16, b"9", path, left, right));
     assert!(!alice_mmr.verify(16, b"8", path, left, right));
-    assert!(alice_mmr.verify_at_checkpoint(23, 16, b"9", path, left, right));
+    assert!(alice_mmr.verify_at_anchor(23, 16, b"9", path, left, right));
     // Bob owns no cap of Alice's log (her cap is owned by Alice)
     assert!(!test_scenario::has_most_recent_for_sender<AppendCap>(&scenario));
     test_scenario::return_shared(alice_mmr);

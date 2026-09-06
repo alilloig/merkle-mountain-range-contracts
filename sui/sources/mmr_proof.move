@@ -2,7 +2,7 @@
 ///
 /// Nothing in this module reads objects. The anchor is trusted as given: a caller that takes
 /// `root` from an untrusted source proves nothing. `mmr::mmr` wraps these functions with anchors
-/// read from the MMR object or its checkpoint table; use those wrappers in dispute paths.
+/// read from the MMR object or its anchor table; use those wrappers in dispute paths.
 ///
 /// Soundness invariants:
 /// 1. every position that reaches `hash_with_integer` is derived here from `(position, size)`;
@@ -52,8 +52,8 @@ const EMissingProofHashes: vector<u8> = b"Proof ran out of hashes";
 /// The batch proof has hashes the verifier did not consume, or the queue was not drained at a peak.
 #[error]
 const ELeftoverProofHashes: vector<u8> = b"Proof has unused hashes";
-/// A computed parent lies above its peak. Unreachable for the position math as specified;
-/// defence in depth.
+/// A computed parent lies above its peak, or not every batch position was consumed by the
+/// mountain loop. Unreachable for the position math as specified; defence in depth.
 #[error]
 const EMalformedProof: vector<u8> = b"Proof structure is inconsistent";
 
@@ -288,6 +288,7 @@ fun root_from_batch_proof(
             };
         };
     });
+    assert!(li == k, EMalformedProof);
     assert!(si == s, ELeftoverProofHashes);
     assert!(pi == u, ELeftoverProofHashes);
     // Bag every peak with the size (unchanged v1 math).

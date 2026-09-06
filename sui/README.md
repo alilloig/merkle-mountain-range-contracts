@@ -75,16 +75,16 @@ All these elements correspond to a specific point in the MMR's lifecycle, meanin
 - Local tree path hashes.
 - Left hand sided peaks.
 - Right hand sided peaks.
-- The MMR's root hash and size the proof was issued at (the *anchor*). On Sui the anchor is never part of the proof: the verifier reads it from the shared `MMR` object or from one of its checkpoints.
+- The MMR's root hash and size the proof was issued at (the *anchor*). On Sui the anchor is never part of the proof: the verifier reads it from the shared `MMR` object (its current root and size) or from one of the `Anchor` rows the object recorded after each append batch.
 
 Taking our initial MMR example if we want to generate a proof for the node 16, we will send the verifier the following information:
 ```pseudocode
 position     = 16
 leaf         = "9"                  // the raw data at position 16
-path         = [h(n17), h(n21)]     // sibling hashes from the leaf up to its local peak
-left_peaks   = [h(n15)]             // peaks left of the local peak
-right_peaks  = [h(n23)]             // peaks right of the local peak
-anchor       = (root = h(23, h(n15), h(n22), h(n23)), size = 23)   // read from the object
+path         = [n17, n21]           // sibling hashes from the leaf up to its local peak
+left_peaks   = [n15]                // peaks left of the local peak
+right_peaks  = [n23]                // peaks right of the local peak
+anchor       = (root = H("23" || n15 || n22 || n23), size = 23)   // read from the object
 ```
 
 Understanding the concept of local tree path hashes is crucial, as they are the key element in proof generation and verification.
@@ -93,18 +93,25 @@ By hashing the data to be verified, we can use the **local tree path hashes** to
 
 ## Package layout
 
-- `mmr::mmr` — the shared `MMR` object, `AdminCap`, `AppendCap`, checkpoints, events, and the
-  object-bound verifiers (`verify`, `verify_at_checkpoint`, `verify_multiple`,
-  `verify_multiple_at_checkpoint`) plus `assert_included`.
+- `mmr::mmr` — the shared `MMR` object, `AdminCap`, `AppendCap`, anchors, events, and the
+  object-bound verifiers (`verify`, `verify_at_anchor`, `verify_multiple`,
+  `verify_multiple_at_anchor`) plus `assert_included` and the abort-shaped twins
+  `assert_verify`, `assert_verify_at_anchor`, `assert_verify_multiple`,
+  `assert_verify_multiple_at_anchor` for Move callers that must not drop a `bool`.
 - `mmr::mmr_proof` — pure verifiers over a caller-supplied `(root, size)`
   (`verify_with_root`, `verify_multiple_with_root`, `compute_root`, `compute_batch_root`). They
   trust their anchor; use them only with anchors you already trust.
 - `mmr::mmr_utils`, `mmr::mmr_bits` — pure position math (`leaf_index_to_position`,
-  `calc_proof_positions`, `get_peaks_positions`, `is_valid_size`, ...).
+  `calc_proof_positions`, `get_peaks_positions`, `is_valid_size`, ...). `ProofPositions`,
+  `calc_proof_positions`, `calc_proof_tree_path_positions` and `get_hashes_from_positions` are a
+  frozen public helper surface for Move-side provers: they validate their inputs
+  (`mmr_utils::EPositionOutOfRange`, `ENotALeaf`, `EStartsAtOne`) and their signatures and
+  semantics do not change across versions.
 - `scripts/mmr_ref.py`, `scripts/golden.py` — the off-chain reference prover in Python (node set,
   peaks, root, single and batch proofs in the verifier's consumption order, verifier mirrors) and
-  the generator of the golden vectors pinned in `tests/`. `python3 scripts/golden.py --check
-  tests/mmr_proof_tests.move` fails when a pinned constant drifts.
+  the generator of the golden vectors pinned in `tests/`. `python3 scripts/golden.py --check`
+  (default: the four test files that pin constants; pass paths to check others) fails when a
+  pinned constant drifts and lists the reference names no file pins.
 
 ## Hashing (normative for off-chain provers)
 
@@ -142,10 +149,10 @@ deprecated; v2 is a fresh publish.
   by id without the holder's cooperation. Both caps have `store`, so they can live in multisig
   custody or inside a wrapper object; a wrapper must gate every function that hands out
   `&AppendCap`, because the MMR trusts possession of the reference.
-- Every non-empty `append_leaves` writes one checkpoint `size → (root, peaks, leaf_count,
-  batch_index, epoch, cap_id)` and emits one `LeavesAppendedEvent`. `cap_id` names the writer
+- Every `append_leaves` call (1 to 1,000 leaves) writes one anchor `size → (root, peaks,
+  leaf_count, batch_index, epoch, cap_id)` and emits one `LeavesAppendedEvent`. `cap_id` names the writer
   on-chain, so a Move contract can tell which batches a later-revoked cap wrote.
-- Store `(mmr_id, checkpoint size, leaf index)` next to every record.
+- Store `(mmr_id, anchor size, leaf index)` next to every record.
 
 ## CLI quickstart
 
@@ -183,21 +190,21 @@ tx2.moveCall({
 });
 // -> LeavesAppendedEvent { mmr_id, cap_id, batch_index, first_leaf_index, batch_leaf_count,
 //    leaf_count, old_size, new_size, leaf_hashes, peaks, root, epoch }
-// Record new_size as the checkpoint of every record in this batch; record j of the batch has
+// Record new_size as the anchor of every record in this batch; record j of the batch has
 // leaf_index = first_leaf_index + j and position = 2*leaf_index - popcount(leaf_index) + 1.
 
 // 3. prove off-chain: rebuild the node set from leaf_hashes (replay: a leaf at position p merges
 //    with the previous peak while p is a right sibling; see scripts/mmr_ref.py), then
-//    single: path = siblings leaf -> local peak, bottom-up; left/right = other peaks at checkpoint size
+//    single: path = siblings leaf -> local peak, bottom-up; left/right = other peaks at anchor size
 //    batch:  siblings in (mountain, height, position) order; untouched_peaks left to right
 
-// 4. verify on-chain against the checkpoint the record names; abort the PTB on failure
+// 4. verify on-chain against the anchor the record names; abort the PTB on failure
 const tx3 = new Transaction();
 const ok = tx3.moveCall({
-  target: `${PKG}::mmr::verify_at_checkpoint`,
+  target: `${PKG}::mmr::verify_at_anchor`,
   arguments: [
     tx3.object(MMR_ID),                       // read-only shared object
-    tx3.pure.u64(checkpointSize),
+    tx3.pure.u64(anchorSize),
     tx3.pure.u64(position),
     tx3.pure.vector('u8', commitment),
     tx3.pure(Hashes.serialize(path)),
@@ -209,12 +216,13 @@ tx3.moveCall({ target: `${PKG}::mmr::assert_included`, arguments: [ok] });
 // ... downstream commands follow; the whole PTB reverts with ENotIncluded on a failed proof.
 // This atomicity protects the party that BUILDS the PTB. A Move contract cannot see this command
 // and any builder can pass a pure `true` to assert_included: a contract that needs inclusion as a
-// precondition calls mmr::verify* itself on the pinned &MMR (see "Rules for integrators").
+// precondition calls mmr::verify* (or the abort-shaped mmr::assert_verify*) itself on the pinned
+// &MMR (see "Rules for integrators").
 
 // 5. several records in one call
 const okAll = tx3.moveCall({
-  target: `${PKG}::mmr::verify_multiple_at_checkpoint`,
-  arguments: [tx3.object(MMR_ID), tx3.pure.u64(checkpointSize),
+  target: `${PKG}::mmr::verify_multiple_at_anchor`,
+  arguments: [tx3.object(MMR_ID), tx3.pure.u64(anchorSize),
     tx3.pure.vector('u64', positions), tx3.pure(Hashes.serialize(leaves)),
     tx3.pure(Hashes.serialize(siblings)), tx3.pure(Hashes.serialize(untouchedPeaks))],
 });
@@ -244,17 +252,22 @@ Batch `{4, 9, 16}` on the README MMR: `siblings = [n5, n8, n3, n13, n17, n21]` (
 
 ## Results and errors
 
-Every verifier returns `bool`. Malformed proofs abort with a named error from `mmr::mmr_proof`
+Every `verify*` returns `bool`; the `assert_verify*` twins abort with `mmr::ENotIncluded` instead
+of returning `false`. Malformed proofs abort with a named error from `mmr::mmr_proof`
 (`EPositionOutOfRange`, `ENotALeaf`, `EPathLength`, `EPeaksCount`, `EHashLength`, `EEmptyBatch`,
 `ELengthMismatch`, `EPositionsNotSorted`, `EMissingProofHashes`, `ELeftoverProofHashes`,
 `EInvalidSize`, `EMalformedProof`); object and capability errors come from `mmr::mmr`
 (`EWrongMMR`, `ECapNotActive`, `ESealed`, `ETooManyAppendCaps`, `ELabelTooLong`, `EEmptyBatch`,
-`ENoCheckpoint`, `EWrongVersion`, `ENotUpgrade`, `ENotIncluded`). Two constants share the name
-`EEmptyBatch`: `verify_multiple` / `verify_multiple_at_checkpoint` abort with
-`mmr_proof::EEmptyBatch`; `append_leaves` aborts with `mmr::EEmptyBatch`. Treat an abort as "bad
-client or bad proof shape" and `false` as "not included". Reads without a transaction: `devInspectTransactionBlock`
-on `root`, `size`, `leaf_count`, `root_at(size)`, `checkpoint(size)`, or `getObject({ showContent: true })`
-(checkpoints are dynamic fields of the `checkpoints` table keyed by `u64`).
+`EBatchTooLarge`, `ENoAnchor`, `EWrongVersion`, `ENotUpgrade`, `ENotIncluded`). Two constants
+share the name `EEmptyBatch`: `verify_multiple` / `verify_multiple_at_anchor` abort with
+`mmr_proof::EEmptyBatch`; `append_leaves` aborts with `mmr::EEmptyBatch` (no leaves) or
+`mmr::EBatchTooLarge` (more than 1,000 leaves). `mmr::mmr_utils` carries its own
+`EPositionOutOfRange` / `ENotALeaf` / `EStartsAtOne` for direct calls of the position helpers; the
+verifiers check positions first, so those never surface through `verify*`. Treat an abort as "bad
+client or bad proof shape" and `false` as "not included". Reads without a transaction:
+`devInspectTransactionBlock` on `root`, `size`, `leaf_count`, `root_at(size)`, `anchor(size)`,
+`package_version()`, `max_append_caps()`, or `getObject({ showContent: true })` (anchors are
+dynamic fields of the `anchors` table keyed by `u64`).
 
 ## Rules for integrators
 
@@ -263,17 +276,17 @@ on `root`, `size`, `leaf_count`, `root_at(size)`, `checkpoint(size)`, or `getObj
   with the same label, and one operator can run several MMRs. Never select an MMR by label; a
   registry that advertises a log must publish the MMR object id as part of the log's
   identity.
-- Move contracts must call `verify` / `verify_at_checkpoint` / `verify_multiple*` themselves on
-  the pinned `&MMR`. Never accept a `bool` (or an `assert_included` result) from the transaction
+- Move contracts must call `verify` / `verify_at_anchor` / `verify_multiple*` (or the
+  abort-shaped `assert_verify*`) themselves on the pinned `&MMR`. Never accept a `bool` (or an `assert_included` result) from the transaction
   as evidence: `assert_included` is a convenience for the party that builds the PTB, and any PTB
   can pass a pure `true` into it.
 - A wrapper object that hands out `&AppendCap` must gate every function that does so; the MMR
   trusts possession of the reference.
 - Proofs are not nullifiers; keep a consumed set keyed by `(mmr_id, position)` for one-shot use.
 - Batches from several caps interleave in consensus order; the chain does not enforce record
-  sequence numbers. Each checkpoint row names its writer (`cap_id`); after a cap revocation,
+  sequence numbers. Each anchor row names its writer (`cap_id`); after a cap revocation,
   treat the records in that cap's batches as suspect.
-- Every checkpoint locks ≈ 0.003–0.004 SUI of storage deposit forever; choose the anchoring cadence
+- Every anchor locks ≈ 0.003–0.004 SUI of storage deposit forever; choose the anchoring cadence
   with that budget in mind.
 - Verifiers are not version-gated: an un-migrated or sealed log verifies forever.
 - Check the package's upgrade status before anchoring: an upgrade can change any function body,
@@ -294,34 +307,37 @@ baseline).
 | `append_leaves`, 1 leaf on empty | ≈ 17 | |
 | `append_leaves`, 100 leaves in one batch | ≈ 60 K | ≈ 0.6 K per leaf |
 | `append_leaves`, 500 leaves in one batch | ≈ 0.94 M | root hashed once per batch |
-| `append_leaves`, 1 leaf on 500 leaves | ≈ 4.9 K | one leaf hash, ≤ 1 merge, root over ≤ 9 peaks, checkpoint row, event |
+| `append_leaves`, 1 leaf on 500 leaves | ≈ 4.9 K | one leaf hash, ≤ 1 merge, root over ≤ 9 peaks, anchor row, event |
 | `append_leaves`, 10 leaves on 500 leaves | ≈ 28.6 K | ≈ 2.9 K per leaf |
 | `verify` (object, 200 leaves, path 7, 3 peaks) | ≈ 15.1 K | ≈ 2 K per path level; > 300 verifies fit in one transaction |
-| `verify_at_checkpoint` (200 leaves) | ≈ 15.2 K | one `Table::borrow` adds ≈ 0.1 K |
+| `verify_at_anchor` (200 leaves) | ≈ 15.2 K | one `contains` + one `borrow` add ≈ 0.1 K |
 | `verify_with_root` (200 leaves) | ≈ 16.7 K | pure variant; includes the `is_valid_size` check |
 | `verify_with_root` (1,000 leaves, path 9, 6 peaks) | ≈ 24.1 K | |
 | `verify_multiple`, 10 leaves spaced 20 apart at 200 leaves | ≈ 71 K | vs ≈ 227 K for 10 single verifies (−69 %) |
 | `verify_multiple`, 100 of 200 leaves | ≈ 299 K | 3.0 K per leaf vs 16.7 K single (−82 %) |
 | `verify_multiple`, 10 leaves spaced 97 apart at 1,000 leaves | ≈ 109 K | vs ≈ 241 K singles (−55 %) |
-| `mint` / `revoke` / `destroy_append_cap` / `seal` | < 300 | `VecSet` scan over ≤ 64 ids |
+| `mint_append_cap` / `revoke_append_cap` / `destroy_append_cap` | ≈ 4 | `probe_cap_*` minus `probe_setup_only`, one active cap; `VecSet` scan over ≤ 64 ids |
+| `seal` | ≈ 3 | `probe_seal` minus `probe_setup_only` |
 
 Complexity: append O(log n) per leaf (one leaf hash, amortised one merge, `get_height` loops of
 ≤ 64 steps) plus one root hash over ≤ 63 peaks per batch; verify O(log n) hashes; batch verify
-O(k·log n) worst case, O(k + log n) when leaves are adjacent; checkpoint lookup O(1).
+O(k·log n) worst case, O(k + log n) when leaves are adjacent; anchor lookup O(1).
 
 Storage (BCS bytes; a 32-byte hash costs 33 inside a `vector<vector<u8>>`; `p` = peaks ≤ 63,
 `c` = active caps ≤ 64): the `MMR` object is ≈ 165 + |label| + 33·p + 32·c bytes (≈ 500 B
-typical, < 5 KB worst case, independent of the leaf count); one `Checkpoint` dynamic field is
+typical, < 5 KB worst case, independent of the leaf count); one `Anchor` dynamic field is
 ≈ 182 + 33·p bytes (≈ 480 B at 9 peaks), one per batch, never deleted; `AdminCap` and `AppendCap`
 are 64 bytes each; a single proof on the wire is 8 + |leaf| + 33·(path + peaks − 1) bytes (≈ 337 B
-at 200 leaves). At 7,600 MIST per byte, one ≈ 480 B checkpoint row costs ≈ 0.0036 SUI, locked for
+at 200 leaves). At 7,600 MIST per byte, one ≈ 480 B anchor row costs ≈ 0.0036 SUI, locked for
 the life of the object: hourly batches ≈ 32 SUI per year per log, one batch per minute
 ≈ 1,900 SUI per year.
 
 Limits that shape the API: pure argument ≤ 16 KB (≈ 496 32-byte leaves per `append_leaves` or
-`verify_multiple` call; join more with `vector::append` in the PTB or split calls); object
-≤ 256 KB (never approached); ≤ 1,000 dynamic-field accesses per transaction (one per
-`*_at_checkpoint` call); 1,024 events per transaction (one per append).
+`verify_multiple` call; join more with `vector::append` in the PTB or split calls); ≤ 1,000
+leaves per `append_leaves` call (`MAX_BATCH_LEAVES`, abort `EBatchTooLarge`; ≈ 2.2 M units for a
+full batch, well inside one transaction); object ≤ 256 KB (never approached); ≤ 1,000
+dynamic-field accesses per transaction (one per `*_at_anchor` call); 1,024 events per
+transaction (one per append).
 
 ## Deploying
 

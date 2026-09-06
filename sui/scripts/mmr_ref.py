@@ -104,7 +104,7 @@ def create_all_ones(bits_length: int) -> int:
 # Position math (== mmr_utils)
 # ---------------------------------------------------------------------------------------------
 def jump_left(position: int) -> int:
-    """Same height, further left: clear every bit below the most significant bit and add one."""
+    """Same height, further left: drop the most significant bit and add one."""
     most_significant_bit = 1 << (get_length(position) - 1)
     return position - (most_significant_bit - 1)
 
@@ -325,7 +325,7 @@ class NodeSet:
 
 
 def peaks_stack_append(peaks: Sequence[Hash], size: int, leaf: bytes) -> Tuple[List[Hash], int, Hash]:
-    """The on-chain append (`mmr::append_leaf`, spec F.1): while the node being placed is a right
+    """The on-chain append (`mmr::append_leaf`): while the node being placed is a right
     sibling, its left sibling is the last peak, so it is popped from the peaks stack. Returns
     (new peaks, new size, leaf hash). Equivalent to `NodeSet.append` without the node vector."""
     stack = list(peaks)
@@ -351,7 +351,7 @@ def _assert_hash_lengths(hashes: Sequence[bytes]) -> None:
 
 def compute_root(size: int, position: int, leaf: bytes, path: Sequence[Hash],
                  left_peaks: Sequence[Hash], right_peaks: Sequence[Hash]) -> Hash:
-    """Root implied by a single proof. Check order mirrors the Move verifier (spec F.3)."""
+    """Root implied by a single proof. Check order mirrors `mmr_proof::root_from_single_proof`."""
     if not is_valid_size(size):
         raise ProofError("EInvalidSize")
     if not 1 <= position <= size:
@@ -384,7 +384,7 @@ def verify_single(root: Hash, size: int, position: int, leaf: bytes, path: Seque
 
 def compute_batch_root(size: int, positions: Sequence[int], leaves: Sequence[bytes],
                        siblings: Sequence[Hash], untouched_peaks: Sequence[Hash]) -> Hash:
-    """Root implied by a batch proof. Mirrors `mmr_proof::root_from_batch_proof` (spec F.4)."""
+    """Root implied by a batch proof. Mirrors `mmr_proof::root_from_batch_proof`."""
     if not is_valid_size(size):
         raise ProofError("EInvalidSize")
     k = len(positions)
@@ -497,12 +497,12 @@ def check_every_leaf(ns: NodeSet) -> None:
 
 
 def self_check(max_leaves: int = 300, sweep_leaves: int = 1000) -> None:
-    """Cross-checks, in order: the peaks-stack append (spec F.1) agrees with the node-vector
+    """Cross-checks, in order: the peaks-stack append (`mmr::append_leaf`) agrees with the node-vector
     append after every one of `max_leaves` incremental appends; every single proof and every
     batch-of-one proof of every MMR up to `max_leaves` leaves verifies and a wrong leaf never
     does; batch proofs of a few fixed subsets verify; every non-empty subset of 1..8 leaves
     verifies as a batch (502 batches); 50 deterministic random batches on 200 leaves verify; and
-    the every-leaf sweep runs on the `sweep_leaves`-leaf MMR (the Move suite samples 65 of those
+    the every-leaf sweep runs on the `sweep_leaves`-leaf MMR (the Move suite samples 75 of those
     leaves in `every_leaf_1000_*`)."""
     ns = NodeSet()
     stack: List[Hash] = []
