@@ -4,8 +4,9 @@
 #[test_only]
 module mmr::mmr_adversarial_tests;
 
-use std::unit_test::{assert_eq, destroy};
+use std::unit_test::assert_eq;
 use mmr::mmr::{Self, MMR, AdminCap, AppendCap};
+use mmr::mmr_test_fixtures::{setup, teardown};
 use mmr::mmr_proof;
 use mmr::mmr_prover::{Self, NodeSet};
 use mmr::mmr_utils;
@@ -25,18 +26,6 @@ fun concat(a: vector<u8>, b: vector<u8>): vector<u8> {
     let mut v = a;
     v.append(b);
     v
-}
-
-fun setup(ctx: &mut TxContext): (MMR, AdminCap, AppendCap) {
-    let (mut mmr, admin) = mmr::new(b"log".to_string(), ctx);
-    let cap = mmr.mint_append_cap(&admin, ctx);
-    (mmr, admin, cap)
-}
-
-fun teardown(mmr: MMR, admin: AdminCap, cap: AppendCap) {
-    destroy(mmr);
-    destroy(admin);
-    destroy(cap);
 }
 
 /// Leaves "from".."to" (inclusive).

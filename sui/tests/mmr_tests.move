@@ -5,6 +5,7 @@ use std::unit_test::{assert_eq, destroy};
 use sui::event;
 use sui::test_scenario;
 use mmr::mmr::{Self, MMR, AdminCap, AppendCap};
+use mmr::mmr_test_fixtures::{setup, teardown};
 use mmr::mmr_proof;
 use mmr::mmr_prover;
 use mmr::mmr_utils;
@@ -19,20 +20,6 @@ const N21: vector<u8> = x"a989072f2a74d648c1a53a036adc2af63e71d4d0ec3f604d4080a6
 const N23: vector<u8> = x"fa4d80fd8386d9b5abaca7d1d5660a0255921013df1928b59501b8bd6d342772";
 
 // ------------------------------------------------------------------------------ helpers
-
-/// One MMR with its AdminCap and one active AppendCap. All objects of a test must come from the
-/// same `TxContext`: `tx_context::dummy()` restarts the id counter, so two dummies collide.
-fun setup(ctx: &mut TxContext): (MMR, AdminCap, AppendCap) {
-    let (mut mmr, admin) = mmr::new(b"log".to_string(), ctx);
-    let cap = mmr.mint_append_cap(&admin, ctx);
-    (mmr, admin, cap)
-}
-
-fun teardown(mmr: MMR, admin: AdminCap, cap: AppendCap) {
-    destroy(mmr);
-    destroy(admin);
-    destroy(cap);
-}
 
 /// Leaves "14".."95".
 fun leaves_14_to_95(): vector<vector<u8>> {

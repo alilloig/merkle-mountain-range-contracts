@@ -146,7 +146,7 @@ fun probe_verify_batch_100_at_200() {
 fun probe_gen_10_singles_at_200() {
     let ns = mmr_prover::build(200);
     let (positions, _leaves) = batch_inputs(10, 20);
-    positions.do_ref!(|p| { let (path, _l, _r) = ns.single_proof(*p); let _ = path; });
+    positions.do_ref!(|p| { let (_path, _l, _r) = ns.single_proof(*p); });
 }
 
 #[test]

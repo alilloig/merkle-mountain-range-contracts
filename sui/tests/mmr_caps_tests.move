@@ -5,22 +5,10 @@ use std::unit_test::{assert_eq, destroy};
 use sui::event;
 use sui::test_scenario;
 use mmr::mmr::{Self, MMR, AdminCap, AppendCap};
+use mmr::mmr_test_fixtures::{setup, teardown};
 use mmr::mmr_prover;
 
 // ------------------------------------------------------------------------------ helpers
-
-/// One MMR with its AdminCap and one active AppendCap, all from one context.
-fun setup(ctx: &mut TxContext): (MMR, AdminCap, AppendCap) {
-    let (mut mmr, admin) = mmr::new(b"log".to_string(), ctx);
-    let cap = mmr.mint_append_cap(&admin, ctx);
-    (mmr, admin, cap)
-}
-
-fun teardown(mmr: MMR, admin: AdminCap, cap: AppendCap) {
-    destroy(mmr);
-    destroy(admin);
-    destroy(cap);
-}
 
 /// The only `AppendCapRevokedEvent` emitted so far, as (mmr_id, cap_id, destroyed).
 fun only_revoked_event(): (ID, ID, bool) {
