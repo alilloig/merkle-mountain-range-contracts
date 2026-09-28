@@ -60,7 +60,7 @@ module mmr::mmr_bits {
     /// These patterns are useful in MMR operations for creating masks or identifying perfect subtrees.
     /// The function checks that the requested bit length doesn't exceed 64 (the size of u64).
     public fun create_all_ones(bitsLength: u8): u64 {
-        assert!(bitsLength <= 64);
+        assert!(bitsLength < 64);
         // Calculate 2^bitsLength - 1, which has 'bitsLength' 1s
         (1 << bitsLength) - 1
     }

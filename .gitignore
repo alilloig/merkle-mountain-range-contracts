@@ -5,6 +5,10 @@ flow/*.pkey
 #sui
 sui/build
 sui/transactions
+sui/traces
+sui/.coverage_map.mvcov
+sui/.trace
+__pycache__/
 
 #aptos
 aptos/build
