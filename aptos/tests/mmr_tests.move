@@ -55,48 +55,49 @@ module mmr::mmr_tests{
         
         // Generate proof for position 1
         proof = mmr.generate_proof(1);
-        // Verify proof for leaf 1 at position 1
-        proof.verify(*string_utils::to_string(&(1 as u64)).bytes());
+        // Verify proof for leaf 1 at position 1, and reject the data of leaf 2
+        assert!(proof.verify(*string_utils::to_string(&(1 as u64)).bytes()));
+        assert!(!proof.verify(*string_utils::to_string(&(2 as u64)).bytes()));
 
         // Generate proof for position 27
         proof = mmr.generate_proof(27);
         // Verify proof for leaf 16 at position 27
-        proof.verify(*string_utils::to_string(&(16 as u64)).bytes());
+        assert!(proof.verify(*string_utils::to_string(&(16 as u64)).bytes()));
 
         // Generate proof for position 32
         proof = mmr.generate_proof(32);
         // Verify proof
-        proof.verify(*string_utils::to_string(&(17 as u64)).bytes());
+        assert!(proof.verify(*string_utils::to_string(&(17 as u64)).bytes()));
 
         // Generate proof for position 58
         proof = mmr.generate_proof(58);
         // Verify proof
-        proof.verify(*string_utils::to_string(&(32 as u64)).bytes());
+        assert!(proof.verify(*string_utils::to_string(&(32 as u64)).bytes()));
 
-        // Generate proof for position 64
+        // Generate proof for position 121
         proof = mmr.generate_proof(121);
-        // Verify proof
-        proof.verify(*string_utils::to_string(&(33 as u64)).bytes());
+        // Verify proof for leaf 64 at position 121
+        assert!(proof.verify(*string_utils::to_string(&(64 as u64)).bytes()));
 
         // Generate proof for position 128
         proof = mmr.generate_proof(128);
         // Verify proof
-        proof.verify(*string_utils::to_string(&(65 as u64)).bytes());
+        assert!(proof.verify(*string_utils::to_string(&(65 as u64)).bytes()));
 
         // Generate proof for position 163
         proof = mmr.generate_proof(163);
         // Verify proof
-        proof.verify(*string_utils::to_string(&(84 as u64)).bytes());
+        assert!(proof.verify(*string_utils::to_string(&(84 as u64)).bytes()));
 
         // Generate proof for position 174
         proof = mmr.generate_proof(174);
         // Verify proof for leaf 89 at position 174
-        proof.verify(*string_utils::to_string(&(89 as u64)).bytes());
+        assert!(proof.verify(*string_utils::to_string(&(89 as u64)).bytes()));
 
         // Generate proof for position 184
         proof = mmr.generate_proof(184);
         // Verify proof for leaf 95 at position 184
-        proof.verify(*string_utils::to_string(&(95 as u64)).bytes());
+        assert!(proof.verify(*string_utils::to_string(&(95 as u64)).bytes()));
 
         // Return MMR to storage
         mmr::return_mmr(mmr, &signer);
@@ -108,7 +109,7 @@ module mmr::mmr_tests{
         let signer = get_account();
         mmr::create_mmr(&signer);
         let mmr = mmr::get_mmr(&signer);
-        // Create 95 leafs which will produce a 184 nodes MMR
+        // Create 128 leafs which will produce a 255 nodes MMR
         let leafCounter: u64 = 1;
         let leafData: vector<u8>;
         let leaves = vector::empty<vector<u8>>();
@@ -128,22 +129,22 @@ module mmr::mmr_tests{
         // Generate proof for position 1
         proof = mmr.generate_proof(1);
         // Verify proof for leaf 1 at position 1
-        proof.verify(*string_utils::to_string(&(1 as u64)).bytes());
+        assert!(proof.verify(*string_utils::to_string(&(1 as u64)).bytes()));
 
-        // Generate proof for position 64
+        // Generate proof for position 121
         proof = mmr.generate_proof(121);
-        // Verify proof
-        proof.verify(*string_utils::to_string(&(33 as u64)).bytes());
+        // Verify proof for leaf 64 at position 121
+        assert!(proof.verify(*string_utils::to_string(&(64 as u64)).bytes()));
 
         // Generate proof for position 128
         proof = mmr.generate_proof(128);
         // Verify proof
-        proof.verify(*string_utils::to_string(&(65 as u64)).bytes());
+        assert!(proof.verify(*string_utils::to_string(&(65 as u64)).bytes()));
     
         // Generate proof for position 248
         proof = mmr.generate_proof(248);
         // Verify proof for leaf 128 at position 248
-        proof.verify(*string_utils::to_string(&(128 as u64)).bytes());
+        assert!(proof.verify(*string_utils::to_string(&(128 as u64)).bytes()));
 
         // Return MMR to storage
         mmr::return_mmr(mmr, &signer);

@@ -135,7 +135,7 @@ Caveats: the integer prefix is not length-framed (`leaf(1, "2" || X) == leaf(12,
 is not length-framed (`leaf(q, l || r) == node(q, l, r)`). Neither is exploitable against the
 verifiers (all positions are verifier-derived, non-leaf positions are rejected, the root is never
 re-hashed), but do not compare hashes across roles off-chain, and prefer leaves that are exactly
-32-byte commitments. Sui and Aptos share this framing (Aptos needs the same peaks fix); the Flow
+32-byte commitments. Sui and Aptos share this framing (the Aptos port carries the same peaks fix); the Flow
 original uses SHA3-256 with 8-byte big-endian integers and its roots are not comparable. The v1
 testnet packages (`0xfecf92…`, `0xbfea29…`) compute wrong roots for every non-perfect size and are
 deprecated; v2 is a fresh publish.

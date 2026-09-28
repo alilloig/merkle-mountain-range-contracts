@@ -90,7 +90,7 @@ module mmr::mmr_utils {
             // that can fit a MMR of this size
             let largest_tree_height = mmr_bits::get_length(size) - 1;
             // Use the height to calculate the largest, and therefor leftmost, tree size
-            let tree_size = (mmr_bits::get_length((largest_tree_height as u64)) as u64);
+            let tree_size = mmr_bits::create_all_ones(largest_tree_height);
             // Iterate over all perfect trees inside the MMR, storing how many nodes are outside the
             // tree we store the peak position on each iteration
             let nodes_left = size;
